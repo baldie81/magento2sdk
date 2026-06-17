@@ -65,6 +65,21 @@ final class MagentoClient
         return $this->http;
     }
 
+    /**
+     * A client scoped to a store view, so writes land at that store's scope
+     * (`rest/<storeCode>/V1/...`). Shares the same underlying transport; an empty
+     * code returns the default (unscoped) view.
+     *
+     *   $magento->forStore('fr')->products()->update('SKU-1', Product::make('SKU-1')->name('Robe'));
+     */
+    public function forStore(string $storeCode): self
+    {
+        $code   = trim($storeCode, "/ \t\n\r\0\x0B");
+        $prefix = $code === '' ? 'rest/' : "rest/$code/";
+
+        return new self($this->http->withRestPrefix($prefix));
+    }
+
     public function products(): Products
     {
         return $this->products ??= new Products($this->http);

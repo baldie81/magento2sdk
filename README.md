@@ -340,11 +340,23 @@ $magento = MagentoClient::fromGuzzle($guzzle, restPrefix: 'rest/');
 
 ## Store scoping
 
-Pass `storeCode` on `Configuration` to scope calls to `rest/<code>/V1/...`:
+Store-specific values are saved by hitting the store-scoped REST path
+(`rest/<code>/V1/...`). Either scope a whole client at construction:
 
 ```php
-new Configuration(baseUrl: '...', token: '...', storeCode: 'default');
+new Configuration(baseUrl: '...', token: '...', storeCode: 'fr');
 ```
+
+…or derive a store-scoped client on the fly with `forStore()` — it shares the
+same transport and leaves the original (default-scope) client untouched:
+
+```php
+// create globally, then override only the store-scoped fields per store view
+$magento->products()->create(Product::make('SKU-1')->name('Dress')->attributeSetId(4)->type('simple'));
+$magento->forStore('fr')->products()->update('SKU-1', Product::make('SKU-1')->name('Robe'));
+```
+
+(Multi-language *option* labels are separate — see `AttributeOption::withStoreLabel()`.)
 
 ## Tests
 

@@ -29,6 +29,15 @@ final class HttpClient
     ) {}
 
     /**
+     * A clone that reuses the same underlying transport but with a different REST
+     * prefix (e.g. store-scoped "rest/<store>/").
+     */
+    public function withRestPrefix(string $restPrefix): self
+    {
+        return new self($this->client, $restPrefix);
+    }
+
+    /**
      * @param array<string,mixed> $query
      * @throws ApiException|TransportException
      */

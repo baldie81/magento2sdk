@@ -6,11 +6,27 @@ namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
 use Baldie81\Magento2SDK\Enum\ProductStatus;
+use Baldie81\Magento2SDK\Support\Product;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
 final class ProductsTest extends MockClientTestCase
 {
+    public function testCreateAcceptsProductObject(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode(['sku' => 'SKU-1']))]);
+
+        $client->products()->create(
+            Product::make('SKU-1')->name('Example')->type('simple')->price(9.99),
+        );
+
+        $request = $this->lastRequest();
+        self::assertSame('POST', $request->getMethod());
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertSame('SKU-1', $body['product']['sku']);
+        self::assertSame('simple', $body['product']['type_id']);
+    }
+
     public function testGetEncodesSkuAndReturnsEntity(): void
     {
         $client  = $this->mockClient([new Response(200, [], json_encode(['sku' => 'A B', 'id' => 5]))]);

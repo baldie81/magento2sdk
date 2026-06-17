@@ -5,10 +5,26 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
+use Baldie81\Magento2SDK\Support\Product;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
 final class BulkTest extends MockClientTestCase
 {
+    public function testCreateProductsWrapsProductObjects(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode(['bulk_uuid' => 'u']))]);
+
+        $client->bulk()->createProducts([
+            Product::make('A')->type('simple'),
+            ['product' => ['sku' => 'B']], // raw, already-wrapped — passes through
+        ]);
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertSame('A', $body[0]['product']['sku']);
+        self::assertSame('simple', $body[0]['product']['type_id']);
+        self::assertSame('B', $body[1]['product']['sku']);
+    }
+
     public function testDispatchCollectsUuidsAndPerChunkErrors(): void
     {
         $client = $this->mockClient([

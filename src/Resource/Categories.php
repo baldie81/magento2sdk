@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Baldie81\Magento2SDK\Resource;
 
+use Baldie81\Magento2SDK\Support\Category;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 
 /**
@@ -53,23 +54,24 @@ final class Categories extends AbstractResource
     }
 
     /**
-     * Create a category. Pass the body without the "category" wrapper.
+     * Create a category. Accepts a {@see Category} builder or a raw array (the
+     * inner category body, without the "category" wrapper).
      *
-     * @param array<string,mixed> $category
+     * @param Category|array<string,mixed> $category
      * @return array<string,mixed>
      */
-    public function create(array $category): array
+    public function create(Category|array $category): array
     {
-        return (array) $this->http->post('V1/categories', ['category' => $category]);
+        return (array) $this->http->post('V1/categories', ['category' => $this->payload($category)]);
     }
 
     /**
-     * @param array<string,mixed> $category
+     * @param Category|array<string,mixed> $category
      * @return array<string,mixed>
      */
-    public function update(int $categoryId, array $category): array
+    public function update(int $categoryId, Category|array $category): array
     {
-        return (array) $this->http->put("V1/categories/{$categoryId}", ['category' => $category]);
+        return (array) $this->http->put("V1/categories/{$categoryId}", ['category' => $this->payload($category)]);
     }
 
     public function delete(int $categoryId): bool

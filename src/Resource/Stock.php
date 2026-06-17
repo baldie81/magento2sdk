@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Baldie81\Magento2SDK\Resource;
 
+use Baldie81\Magento2SDK\Support\StockItem;
+
 /**
  * Stock / inventory updates.
  *
@@ -25,13 +27,13 @@ final class Stock extends AbstractResource
     /**
      * Update a SKU's stock item. Returns the stock item id.
      *
-     * @param array<string,mixed> $stockItem e.g. ['qty' => 12, 'is_in_stock' => true]
+     * @param StockItem|array<string,mixed> $stockItem e.g. ['qty' => 12, 'is_in_stock' => true]
      */
-    public function update(string $sku, array $stockItem, int $itemId = 0): int
+    public function update(string $sku, StockItem|array $stockItem, int $itemId = 0): int
     {
         return (int) $this->http->put(
             'V1/products/' . $this->segment($sku) . '/stockItems/' . $itemId,
-            ['stockItem' => $stockItem],
+            ['stockItem' => $this->payload($stockItem)],
         );
     }
 

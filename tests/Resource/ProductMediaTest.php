@@ -5,10 +5,24 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
+use Baldie81\Magento2SDK\Support\MediaEntry;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
 final class ProductMediaTest extends MockClientTestCase
 {
+    public function testCreateAcceptsMediaEntryObject(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode(7))]);
+
+        $id = $client->media()->create('A', MediaEntry::image('B64', 'image/png', 'a.png')->label('Front'));
+
+        self::assertSame(7, $id);
+        $entry = json_decode((string) $this->lastRequest()->getBody(), true)['entry'];
+        self::assertSame('image', $entry['media_type']);
+        self::assertSame('B64', $entry['content']['base64_encoded_data']);
+        self::assertSame('Front', $entry['label']);
+    }
+
     public function testCreateReturnsEntryIdAndWrapsEntry(): void
     {
         $client = $this->mockClient([new Response(200, [], json_encode(31))]);

@@ -5,10 +5,26 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
+use Baldie81\Magento2SDK\Support\Price;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
 final class PricesTest extends MockClientTestCase
 {
+    public function testSetBasePricesAcceptsPriceObjects(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode([]))]);
+
+        $client->prices()->setBasePrices([
+            Price::make('A', 9.9),
+            ['sku' => 'B', 'price' => 5.0, 'store_id' => 0], // raw array still works
+        ]);
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertSame('A', $body['prices'][0]['sku']);
+        self::assertSame(0, $body['prices'][0]['store_id']);
+        self::assertSame('B', $body['prices'][1]['sku']);
+    }
+
     public function testSetBasePriceWrapsSingleEntryAndReturnsFailures(): void
     {
         $client = $this->mockClient([new Response(200, [], json_encode([]))]);

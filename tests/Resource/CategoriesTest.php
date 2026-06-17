@@ -5,10 +5,21 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
+use Baldie81\Magento2SDK\Support\Category;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
 final class CategoriesTest extends MockClientTestCase
 {
+    public function testCreateAcceptsCategoryObject(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode(['id' => 9]))]);
+
+        $client->categories()->create(Category::make('Shoes', 2)->isActive(true));
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertSame(['name' => 'Shoes', 'parent_id' => 2, 'is_active' => true], $body['category']);
+    }
+
     public function testListFlatPaginatesEveryPage(): void
     {
         $client = $this->mockClient([

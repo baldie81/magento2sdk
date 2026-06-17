@@ -16,7 +16,7 @@ namespace Baldie81\Magento2SDK\Support;
  *       ->withStoreLabel(1, 'Κόκκινο')   // Greek store view
  *       ->withStoreLabel(2, 'Rouge');    // French store view
  */
-final class AttributeOption
+final class AttributeOption implements Arrayable
 {
     /** @var array<int,string> store_id => label */
     private array $storeLabels = [];

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Baldie81\Magento2SDK\Resource;
 
+use Baldie81\Magento2SDK\Support\MediaEntry;
+
 /**
  * Product media gallery entries (`rest/V1/products/{sku}/media`).
  */
@@ -33,21 +35,26 @@ final class ProductMedia extends AbstractResource
      *   ['media_type' => 'image', 'label' => 'Front', 'types' => ['image'],
      *    'content' => ['base64_encoded_data' => …, 'type' => 'image/jpeg', 'name' => 'front.jpg']]
      *
-     * @param array<string,mixed> $entry
+     * Accepts a {@see MediaEntry} builder or a raw array.
+     *
+     * @param MediaEntry|array<string,mixed> $entry
      */
-    public function create(string $sku, array $entry): int
+    public function create(string $sku, MediaEntry|array $entry): int
     {
-        return (int) $this->http->post('V1/products/' . $this->segment($sku) . '/media', ['entry' => $entry]);
+        return (int) $this->http->post(
+            'V1/products/' . $this->segment($sku) . '/media',
+            ['entry' => $this->payload($entry)],
+        );
     }
 
     /**
-     * @param array<string,mixed> $entry
+     * @param MediaEntry|array<string,mixed> $entry
      */
-    public function update(string $sku, int $entryId, array $entry): bool
+    public function update(string $sku, int $entryId, MediaEntry|array $entry): bool
     {
         return (bool) $this->http->put(
             'V1/products/' . $this->segment($sku) . '/media/' . $entryId,
-            ['entry' => $entry],
+            ['entry' => $this->payload($entry)],
         );
     }
 

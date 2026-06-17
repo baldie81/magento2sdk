@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Resource;
 
 use Baldie81\Magento2SDK\Enum\ProductStatus;
+use Baldie81\Magento2SDK\Support\Product;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 
 /**
@@ -21,25 +22,26 @@ final class Products extends AbstractResource
     }
 
     /**
-     * Create a product. Pass the product body without the "product" wrapper.
+     * Create a product. Accepts a {@see Product} builder or a raw array (the
+     * inner product body, without the "product" wrapper).
      *
-     * @param array<string,mixed> $product
+     * @param Product|array<string,mixed> $product
      * @return array<string,mixed>
      */
-    public function create(array $product): array
+    public function create(Product|array $product): array
     {
-        return (array) $this->http->post('V1/products', ['product' => $product]);
+        return (array) $this->http->post('V1/products', ['product' => $this->payload($product)]);
     }
 
     /**
      * Create or update a product (Magento upserts by SKU on PUT).
      *
-     * @param array<string,mixed> $product
+     * @param Product|array<string,mixed> $product
      * @return array<string,mixed>
      */
-    public function update(string $sku, array $product): array
+    public function update(string $sku, Product|array $product): array
     {
-        return (array) $this->http->put('V1/products/' . $this->segment($sku), ['product' => $product]);
+        return (array) $this->http->put('V1/products/' . $this->segment($sku), ['product' => $this->payload($product)]);
     }
 
     public function delete(string $sku): bool

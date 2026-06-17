@@ -4,22 +4,25 @@ declare(strict_types=1);
 
 namespace Baldie81\Magento2SDK\Resource;
 
+use Baldie81\Magento2SDK\Support\Price;
+
 /**
  * Base and special (sale) prices (`rest/V1/products/base-prices`,
  * `rest/V1/products/special-price`).
  *
  * Magento's price endpoints take a list and return the items that **failed**
- * (an empty array means everything succeeded).
+ * (an empty array means everything succeeded). Each price may be a {@see Price}
+ * builder or a raw array.
  */
 final class Prices extends AbstractResource
 {
     /**
-     * @param list<array<string,mixed>> $prices each ['sku' => …, 'price' => …, 'store_id' => 0]
+     * @param list<Price|array<string,mixed>> $prices each ['sku' => …, 'price' => …, 'store_id' => 0]
      * @return array<int,mixed> failed items (empty = all saved)
      */
     public function setBasePrices(array $prices): array
     {
-        return (array) $this->http->post('V1/products/base-prices', ['prices' => array_values($prices)]);
+        return (array) $this->http->post('V1/products/base-prices', ['prices' => $this->payloads($prices)]);
     }
 
     /**
@@ -29,25 +32,25 @@ final class Prices extends AbstractResource
      */
     public function setBasePrice(string $sku, float $price, int $storeId = 0): array
     {
-        return $this->setBasePrices([['sku' => $sku, 'price' => $price, 'store_id' => $storeId]]);
+        return $this->setBasePrices([Price::make($sku, $price, $storeId)]);
     }
 
     /**
-     * @param list<array<string,mixed>> $prices each ['sku','store_id','price','price_from','price_to']
+     * @param list<Price|array<string,mixed>> $prices each ['sku','store_id','price','price_from','price_to']
      * @return array<int,mixed> failed items (empty = all saved)
      */
     public function setSpecialPrices(array $prices): array
     {
-        return (array) $this->http->post('V1/products/special-price', ['prices' => array_values($prices)]);
+        return (array) $this->http->post('V1/products/special-price', ['prices' => $this->payloads($prices)]);
     }
 
     /**
-     * @param list<array<string,mixed>> $prices
+     * @param list<Price|array<string,mixed>> $prices
      * @return array<int,mixed> failed items (empty = all deleted)
      */
     public function deleteSpecialPrices(array $prices): array
     {
-        return (array) $this->http->post('V1/products/special-price-delete', ['prices' => array_values($prices)]);
+        return (array) $this->http->post('V1/products/special-price-delete', ['prices' => $this->payloads($prices)]);
     }
 
     /**

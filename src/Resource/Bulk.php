@@ -6,6 +6,7 @@ namespace Baldie81\Magento2SDK\Resource;
 
 use GuzzleHttp\Promise\Utils;
 use Baldie81\Magento2SDK\Exception\ApiException;
+use Baldie81\Magento2SDK\Support\Product;
 
 /**
  * Asynchronous bulk API (`rest/async/bulk/V1/...` and `rest/V1/bulk/...`).
@@ -18,13 +19,14 @@ final class Bulk extends AbstractResource
 {
     /**
      * Queue one batch of product saves (create or update; Magento upserts by SKU).
+     * Each item may be a {@see Product} builder or a raw {"product": {...}} payload.
      *
-     * @param list<array<string,mixed>> $products each item a {"product": {...}} payload
+     * @param list<Product|array<string,mixed>> $products
      * @return array<string,mixed> decoded response (bulk_uuid, request_items, errors)
      */
     public function createProducts(array $products): array
     {
-        return (array) $this->http->post('async/bulk/V1/products', array_values($products));
+        return (array) $this->http->post('async/bulk/V1/products', $this->wrapProducts($products));
     }
 
     /**
@@ -33,7 +35,7 @@ final class Bulk extends AbstractResource
      * on each batch in turn. Results are keyed by the input chunk index; each is
      * either ['bulk_uuid' => string|null] or ['error' => string].
      *
-     * @param list<list<array<string,mixed>>> $chunks
+     * @param list<list<Product|array<string,mixed>>> $chunks
      * @return array<int,array{bulk_uuid?:string|null,error?:string}>
      */
     public function dispatchProducts(array $chunks, int $concurrency = 4): array
@@ -43,7 +45,7 @@ final class Bulk extends AbstractResource
         foreach (array_chunk($chunks, max(1, $concurrency), true) as $wave) {
             $promises = [];
             foreach ($wave as $i => $chunk) {
-                $promises[$i] = $this->http->postAsync('async/bulk/V1/products', array_values($chunk));
+                $promises[$i] = $this->http->postAsync('async/bulk/V1/products', $this->wrapProducts($chunk));
             }
 
             foreach (Utils::settle($promises)->wait() as $i => $outcome) {
@@ -59,6 +61,23 @@ final class Bulk extends AbstractResource
         ksort($results);
 
         return $results;
+    }
+
+    /**
+     * Wrap each product for the bulk endpoint: a {@see Product} becomes a
+     * {"product": {...}} entry; a raw array is assumed already in that shape.
+     *
+     * @param list<Product|array<string,mixed>> $products
+     * @return list<array<string,mixed>>
+     */
+    private function wrapProducts(array $products): array
+    {
+        $wrapped = [];
+        foreach ($products as $product) {
+            $wrapped[] = $product instanceof Product ? ['product' => $product->toArray()] : $product;
+        }
+
+        return array_values($wrapped);
     }
 
     /**

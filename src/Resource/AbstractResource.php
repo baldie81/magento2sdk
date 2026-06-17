@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Resource;
 
 use Baldie81\Magento2SDK\Http\HttpClient;
+use Baldie81\Magento2SDK\Support\Arrayable;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 
 abstract class AbstractResource
@@ -27,6 +28,33 @@ abstract class AbstractResource
     protected function segment(string $value): string
     {
         return rawurlencode($value);
+    }
+
+    /**
+     * Normalise an object-or-array argument to the array payload Magento wants.
+     *
+     * @param Arrayable|array<string,mixed> $value
+     * @return array<string,mixed>
+     */
+    protected function payload(Arrayable|array $value): array
+    {
+        return $value instanceof Arrayable ? $value->toArray() : $value;
+    }
+
+    /**
+     * Normalise a list of object-or-array arguments.
+     *
+     * @param iterable<Arrayable|array<string,mixed>> $values
+     * @return list<array<string,mixed>>
+     */
+    protected function payloads(iterable $values): array
+    {
+        $out = [];
+        foreach ($values as $value) {
+            $out[] = $this->payload($value);
+        }
+
+        return $out;
     }
 
     /**

@@ -5,10 +5,21 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
+use Baldie81\Magento2SDK\Support\StockItem;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
 final class StockTest extends MockClientTestCase
 {
+    public function testUpdateAcceptsStockItemObject(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode(99))]);
+
+        $client->stock()->update('A', StockItem::make()->qty(3)->inStock(true));
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertEquals(['qty' => 3, 'is_in_stock' => true], $body['stockItem']);
+    }
+
     public function testSetQuantityPutsStockItemAndDerivesInStock(): void
     {
         $client = $this->mockClient([new Response(200, [], json_encode(42))]);

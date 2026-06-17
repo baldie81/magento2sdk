@@ -14,9 +14,11 @@ endpoints you actually reach for when integrating a catalog:
 - **Configurable products** — link & unlink simple children, manage option axes
 - **Async bulk API** — queue product batches (single or concurrent), poll status
 
-It also gives you a fluent `SearchCriteria` builder, a typed
-`BulkOperationStatus` enum, and a clean exception hierarchy instead of leaking
-Guzzle exceptions.
+It also gives you fluent value-object builders (`Product`, `StockItem`, `Price`,
+`Category`, `MediaEntry`, `AttributeOption`) that every write method accepts
+interchangeably with plain arrays, a fluent `SearchCriteria` builder, typed
+enums (`ProductStatus`, `Visibility`, `FrontendInput`, `BulkOperationStatus`),
+and a clean exception hierarchy instead of leaking Guzzle exceptions.
 
 > Scope: this targets the **standard** Magento 2 REST API. Custom-module
 > endpoints (e.g. marketplace extensions) are intentionally out of scope.
@@ -45,6 +47,51 @@ $product = $magento->products()->get('SKU-123');
 Authentication is a bearer token — a Magento **Integration** access token, or an
 admin token you obtain yourself. TLS verification is **on** by default; pass
 `verifySsl: false` only for local/self-signed environments.
+
+## Value objects (or arrays)
+
+Every write method accepts **either** a fluent builder **or** a raw array, so you
+can opt into type-safety without giving up the array escape hatch. The builders
+(`Product`, `StockItem`, `Price`, `Category`, `MediaEntry`, `AttributeOption`)
+all implement `Arrayable`:
+
+```php
+use Baldie81\Magento2SDK\Support\Product;
+use Baldie81\Magento2SDK\Support\MediaEntry;
+use Baldie81\Magento2SDK\Enum\ProductStatus;
+use Baldie81\Magento2SDK\Enum\Visibility;
+
+// Builder — a simple with an image attached:
+$magento->products()->create(
+    Product::make('SKU-123')
+        ->name('Example')->attributeSetId(4)->type('simple')
+        ->price(19.90)->status(ProductStatus::Enabled)->visibility(Visibility::CatalogSearch)
+        ->websiteIds([1])
+        ->customAttribute('color', 49)
+        ->mediaGalleryEntry(
+            MediaEntry::image($base64, 'image/jpeg', 'front.jpg')->roles(['image'])
+        )
+);
+
+// A configurable carries its axis and child links in the same builder:
+$magento->products()->create(
+    Product::make('PARENT-SKU')
+        ->name('Parent')->attributeSetId(4)->type('configurable')->visibility(Visibility::CatalogSearch)
+        ->websiteIds([1])
+        ->configurableOption(93, [49, 239], 'Color') // axis: attribute id + option ids
+        ->configurableLinks([10, 11])                // child entity ids
+);
+
+// …or the exact same calls with raw arrays — both are accepted everywhere:
+$magento->products()->create([
+    'sku' => 'SKU-123', 'name' => 'Example', 'attribute_set_id' => 4,
+    'type_id' => 'simple', 'price' => 19.90,
+]);
+```
+
+`->set('field', $value)` on any builder is the escape hatch for fields it doesn't
+model explicitly. The builders produce the **inner** body — the resource adds the
+`{"product": …}` / `{"category": …}` / `{"stockItem": …}` wrapper.
 
 ## Products
 

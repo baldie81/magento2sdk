@@ -177,8 +177,8 @@ use Baldie81\Magento2SDK\Support\AttributeOption;
 
 $optionId = $magento->attributes()->addOption('color',
     AttributeOption::create('Red')
-        ->withStoreLabel(1, 'Κόκκινο')   // store view 1
-        ->withStoreLabel(2, 'Rouge')     // store view 2
+        ->withStoreLabel(1, 'Rojo')      // store view 1 (Spanish)
+        ->withStoreLabel(2, 'Rouge')     // store view 2 (French)
 );
 
 // A raw array still works for full control:
@@ -187,31 +187,31 @@ $magento->attributes()->addOption('color', ['label' => 'Blue']);
 $options = $magento->attributes()->options('color');
 
 // Idempotent: returns the existing option's id if one already matches the admin
-// label (case-insensitive), otherwise creates it — so "Black"/"black"/"bLack"
+// label (case-insensitive), otherwise creates it — so "Red"/"red"/"rEd"
 // never become three options.
-$id = $magento->attributes()->ensureOption('color', AttributeOption::create('Black'));
+$id = $magento->attributes()->ensureOption('color', AttributeOption::create('Red'));
 
 // Just look one up (case-insensitively) without creating:
-$id = $magento->attributes()->findOption('color', 'black'); // string|null
+$id = $magento->attributes()->findOption('color', 'red'); // string|null
 
 // Create-or-update: refreshes an existing option's translations instead of
 // skipping it (ensureOption leaves an existing option untouched).
 $magento->attributes()->upsertOption('color',
-    AttributeOption::create('Black')->withStoreLabel(1, 'Μαύρο')
+    AttributeOption::create('Red')->withStoreLabel(1, 'Rojo')
 );
 
 // Bulk idempotent insert: one lookup up front, then create only what's
 // missing. Accepts labels, AttributeOptions, or raw arrays — and dedupes
-// "Black"/"black" within the batch. Returns label => option id.
+// "Red"/"red" within the batch. Returns label => option id.
 $ids = $magento->attributes()->ensureOptions('color', [
-    'Black',
-    'White',
-    AttributeOption::create('Red')->withStoreLabel(1, 'Κόκκινο'),
+    'Red',
+    'Blue',
+    AttributeOption::create('Green')->withStoreLabel(1, 'Verde'),
 ]);
-// $ids === ['Black' => '5', 'White' => '3', 'Red' => 'id_9']
+// $ids === ['Red' => '5', 'Blue' => '3', 'Green' => 'id_9']
 
 // The low-level map is still available if you want to drive it yourself:
-$existing = $magento->attributes()->optionMap('color'); // ['black' => '5', ...]
+$existing = $magento->attributes()->optionMap('color'); // ['red' => '5', ...]
 ```
 
 `optionMap()` is fetched **once per attribute and cached in memory** for the

@@ -12,7 +12,7 @@ endpoints you actually reach for when integrating a catalog:
 - **Prices** — base prices and special (sale) prices
 - **Product media** — list / add / update / remove gallery entries
 - **Configurable products** — link & unlink simple children, manage option axes
-- **Orders** — get / search, create, invoice, ship, cancel, status
+- **Orders** — get / search, create, invoice, ship, refund, cancel, status
 - **Customers** — get / search, create / update (with inline addresses), delete
 - **Async bulk API** — queue product batches (single or concurrent), poll status
 
@@ -317,6 +317,20 @@ $shipmentId = $magento->orders()->ship(7,
     tracks: [['track_number' => '1Z999', 'title' => 'UPS', 'carrier_code' => 'ups']],
     notify: true,
 );
+
+// Refund — creates a credit memo (whole order or specific items), returns its id.
+// refund() is OFFLINE (records the memo, no gateway call). $arguments carries
+// extras like adjustments / return-to-stock.
+$creditMemoId = $magento->orders()->refund(7);
+$magento->orders()->refund(7,
+    items: [['order_item_id' => 11, 'qty' => 1]],
+    comment: 'Damaged on arrival',
+    arguments: ['adjustment_negative' => 1.50], // e.g. a restocking fee withheld
+);
+
+// Online (gateway) refund is keyed by invoice id — e.g. the id from invoice():
+$magento->orders()->refundInvoice($invoiceId);                 // isOnline: true by default
+$magento->orders()->refundInvoice($invoiceId, isOnline: false); // offline memo against the invoice
 
 // Cancel — returns false if Magento refuses (already invoiced/shipped/complete):
 $magento->orders()->cancel(7);

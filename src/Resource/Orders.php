@@ -132,6 +132,79 @@ final class Orders extends AbstractResource
     }
 
     /**
+     * Refund an order, creating a credit memo. With no items the whole order is
+     * refunded; otherwise pass `[['order_item_id' => 1, 'qty' => 2], ...]`.
+     * `$arguments` carries credit-memo extras (e.g. `shipping_amount`,
+     * `adjustment_positive`, `adjustment_negative`, or
+     * `extension_attributes.return_to_stock_items`). Returns the new credit
+     * memo id.
+     *
+     * Note: this is an *offline* refund (it records a credit memo but does not
+     * call the payment gateway). To refund online against a captured payment,
+     * use {@see refundInvoice()}.
+     *
+     * @param list<array<string,mixed>> $items
+     * @param array<string,mixed>       $arguments
+     */
+    public function refund(
+        int $orderId,
+        array $items = [],
+        bool $notify = false,
+        ?string $comment = null,
+        array $arguments = [],
+    ): int {
+        $body = ['notify' => $notify];
+        if ($items !== []) {
+            $body['items'] = array_values($items);
+        }
+        if ($comment !== null) {
+            $body['appendComment'] = true;
+            $body['comment']       = ['comment' => $comment];
+        }
+        if ($arguments !== []) {
+            $body['arguments'] = $arguments;
+        }
+
+        return (int) $this->http->post("V1/order/{$orderId}/refund", $body);
+    }
+
+    /**
+     * Refund a specific invoice, creating a credit memo against it. With
+     * `$isOnline` true (the default) the refund is sent to the payment gateway
+     * (a real chargeback against the captured payment); pass false to record an
+     * offline credit memo instead. Items/comment/arguments behave as in
+     * {@see refund()}. Returns the new credit memo id.
+     *
+     * Keyed by invoice id (e.g. the id returned by {@see invoice()}), not order
+     * id — Magento exposes online refunds only at the invoice level.
+     *
+     * @param list<array<string,mixed>> $items
+     * @param array<string,mixed>       $arguments
+     */
+    public function refundInvoice(
+        int $invoiceId,
+        array $items = [],
+        bool $isOnline = true,
+        bool $notify = false,
+        ?string $comment = null,
+        array $arguments = [],
+    ): int {
+        $body = ['isOnline' => $isOnline, 'notify' => $notify];
+        if ($items !== []) {
+            $body['items'] = array_values($items);
+        }
+        if ($comment !== null) {
+            $body['appendComment'] = true;
+            $body['comment']       = ['comment' => $comment];
+        }
+        if ($arguments !== []) {
+            $body['arguments'] = $arguments;
+        }
+
+        return (int) $this->http->post("V1/invoice/{$invoiceId}/refund", $body);
+    }
+
+    /**
      * Cancel an order. Returns whether Magento accepted the cancellation (it
      * refuses orders that are already invoiced/shipped/complete).
      */

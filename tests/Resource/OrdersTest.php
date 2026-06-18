@@ -100,6 +100,64 @@ final class OrdersTest extends MockClientTestCase
         self::assertSame('ups', $body['tracks'][0]['carrier_code']);
     }
 
+    public function testRefundHitsSingularPathWithItemsAndArguments(): void
+    {
+        $client = $this->mockClient([new Response(200, [], '55')]);
+        $creditMemoId = $client->orders()->refund(
+            7,
+            [['order_item_id' => 11, 'qty' => 2]],
+            notify: true,
+            comment: 'Damaged',
+            arguments: ['shipping_amount' => 0, 'adjustment_negative' => 1.5],
+        );
+
+        self::assertSame(55, $creditMemoId);
+        $request = $this->lastRequest();
+        self::assertSame('POST', $request->getMethod());
+        self::assertSame('https://example.test/rest/V1/order/7/refund', (string) $request->getUri());
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertSame([['order_item_id' => 11, 'qty' => 2]], $body['items']);
+        self::assertTrue($body['notify']);
+        self::assertTrue($body['appendComment']);
+        self::assertSame('Damaged', $body['comment']['comment']);
+        self::assertSame(1.5, $body['arguments']['adjustment_negative']);
+    }
+
+    public function testRefundFullOrderOmitsItemsAndArguments(): void
+    {
+        $client = $this->mockClient([new Response(200, [], '56')]);
+        $client->orders()->refund(7);
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertArrayNotHasKey('items', $body);
+        self::assertArrayNotHasKey('arguments', $body);
+        self::assertFalse($body['notify']);
+    }
+
+    public function testRefundInvoiceHitsInvoicePathAndIsOnlineByDefault(): void
+    {
+        $client = $this->mockClient([new Response(200, [], '77')]);
+        $creditMemoId = $client->orders()->refundInvoice(31);
+
+        self::assertSame(77, $creditMemoId);
+        $request = $this->lastRequest();
+        self::assertSame('POST', $request->getMethod());
+        self::assertSame('https://example.test/rest/V1/invoice/31/refund', (string) $request->getUri());
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertTrue($body['isOnline']);
+        self::assertArrayNotHasKey('items', $body);
+    }
+
+    public function testRefundInvoiceCanRefundOfflineWithItems(): void
+    {
+        $client = $this->mockClient([new Response(200, [], '78')]);
+        $client->orders()->refundInvoice(31, [['order_item_id' => 11, 'qty' => 1]], isOnline: false);
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertFalse($body['isOnline']);
+        self::assertSame([['order_item_id' => 11, 'qty' => 1]], $body['items']);
+    }
+
     public function testCancelPostsToPluralPathAndReturnsBool(): void
     {
         $client = $this->mockClient([new Response(200, [], 'true')]);

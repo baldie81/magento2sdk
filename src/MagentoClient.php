@@ -10,6 +10,8 @@ use Baldie81\Magento2SDK\Resource\AttributeSets;
 use Baldie81\Magento2SDK\Resource\Bulk;
 use Baldie81\Magento2SDK\Resource\Categories;
 use Baldie81\Magento2SDK\Resource\ConfigurableProducts;
+use Baldie81\Magento2SDK\Resource\Customers;
+use Baldie81\Magento2SDK\Resource\Orders;
 use Baldie81\Magento2SDK\Resource\Prices;
 use Baldie81\Magento2SDK\Resource\ProductAttributes;
 use Baldie81\Magento2SDK\Resource\ProductMedia;
@@ -37,6 +39,8 @@ final class MagentoClient
     private ?ProductMedia $media = null;
     private ?ConfigurableProducts $configurables = null;
     private ?Bulk $bulk = null;
+    private ?Orders $orders = null;
+    private ?Customers $customers = null;
 
     public function __construct(
         private readonly HttpClient $http,
@@ -123,5 +127,15 @@ final class MagentoClient
     public function bulk(): Bulk
     {
         return $this->bulk ??= new Bulk($this->http);
+    }
+
+    public function orders(): Orders
+    {
+        return $this->orders ??= new Orders($this->http);
+    }
+
+    public function customers(): Customers
+    {
+        return $this->customers ??= new Customers($this->http);
     }
 }

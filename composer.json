@@ -1,6 +1,6 @@
 {
   "name": "baldie81/magento2-sdk",
-  "description": "Framework-independent PHP SDK for the Magento 2 REST API: products, attributes, attribute sets, categories and the asynchronous bulk API.",
+  "description": "Framework-independent PHP SDK for the Magento 2 REST API: products, attributes, attribute sets, categories, orders, customers and the asynchronous bulk API.",
   "type": "library",
   "license": "MIT",
   "keywords": ["magento", "magento2", "rest", "api", "sdk", "ecommerce", "guzzle"],

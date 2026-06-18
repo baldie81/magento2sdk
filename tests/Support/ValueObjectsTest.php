@@ -6,8 +6,10 @@ namespace Baldie81\Magento2SDK\Tests\Support;
 
 use Baldie81\Magento2SDK\Enum\ProductStatus;
 use Baldie81\Magento2SDK\Enum\Visibility;
+use Baldie81\Magento2SDK\Support\Address;
 use Baldie81\Magento2SDK\Support\Arrayable;
 use Baldie81\Magento2SDK\Support\Category;
+use Baldie81\Magento2SDK\Support\Customer;
 use Baldie81\Magento2SDK\Support\MediaEntry;
 use Baldie81\Magento2SDK\Support\Price;
 use Baldie81\Magento2SDK\Support\Product;
@@ -112,6 +114,59 @@ final class ValueObjectsTest extends TestCase
             'is_active'         => true,
             'custom_attributes' => [['attribute_code' => 'description', 'value' => 'Nice']],
         ], Category::make('Shoes', 2)->isActive(true)->customAttribute('description', 'Nice')->toArray());
+    }
+
+    public function testAddressBuildsNestedRegionAndMirrorsRegionId(): void
+    {
+        $address = Address::make()
+            ->firstname('Jane')->lastname('Doe')
+            ->street(['1 A St', 'Apt 2'])
+            ->city('Austin')->region('Texas', regionId: 57, regionCode: 'TX')->postcode('78758')
+            ->countryId('US')->telephone('512-555-1111')
+            ->defaultBilling()->defaultShipping(false);
+
+        self::assertSame([
+            'firstname'        => 'Jane',
+            'lastname'         => 'Doe',
+            'street'           => ['1 A St', 'Apt 2'],
+            'city'             => 'Austin',
+            'postcode'         => '78758',
+            'country_id'       => 'US',
+            'telephone'        => '512-555-1111',
+            'default_billing'  => true,
+            'default_shipping' => false,
+            'region_id'        => 57,
+            'region'           => ['region' => 'Texas', 'region_code' => 'TX', 'region_id' => 57],
+        ], $address->toArray());
+    }
+
+    public function testCustomerCarriesAddressesAndCustomAttributes(): void
+    {
+        $customer = Customer::make('jane@example.com')
+            ->firstname('Jane')->lastname('Doe')
+            ->websiteId(1)->groupId(1)
+            ->address(Address::make()->street(['1 A St'])->city('Austin')->countryId('US'))
+            ->customAttribute('loyalty_tier', 'gold');
+
+        self::assertInstanceOf(Arrayable::class, $customer);
+        self::assertSame([
+            'email'             => 'jane@example.com',
+            'firstname'         => 'Jane',
+            'lastname'          => 'Doe',
+            'website_id'        => 1,
+            'group_id'          => 1,
+            'addresses'         => [[
+                'street'     => ['1 A St'],
+                'city'       => 'Austin',
+                'country_id' => 'US',
+            ]],
+            'custom_attributes' => [['attribute_code' => 'loyalty_tier', 'value' => 'gold']],
+        ], $customer->toArray());
+    }
+
+    public function testCustomerOmitsUnsetFields(): void
+    {
+        self::assertSame(['email' => 'x@example.com'], Customer::make('x@example.com')->toArray());
     }
 
     public function testMediaEntryImage(): void

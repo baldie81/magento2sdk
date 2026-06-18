@@ -12,13 +12,16 @@ endpoints you actually reach for when integrating a catalog:
 - **Prices** — base prices and special (sale) prices
 - **Product media** — list / add / update / remove gallery entries
 - **Configurable products** — link & unlink simple children, manage option axes
+- **Orders** — get / search, create, invoice, ship, cancel
+- **Customers** — get / search, create / update (with inline addresses), delete
 - **Async bulk API** — queue product batches (single or concurrent), poll status
 
 It also gives you fluent value-object builders (`Product`, `StockItem`, `Price`,
-`Category`, `MediaEntry`, `AttributeOption`) that every write method accepts
-interchangeably with plain arrays, a fluent `SearchCriteria` builder, typed
-enums (`ProductStatus`, `Visibility`, `FrontendInput`, `BulkOperationStatus`),
-and a clean exception hierarchy instead of leaking Guzzle exceptions.
+`Category`, `MediaEntry`, `AttributeOption`, `Customer`, `Address`) that every
+write method accepts interchangeably with plain arrays, a fluent `SearchCriteria`
+builder, typed enums (`ProductStatus`, `Visibility`, `FrontendInput`,
+`BulkOperationStatus`, `OrderState`), and a clean exception hierarchy instead of
+leaking Guzzle exceptions.
 
 > Scope: this targets the **standard** Magento 2 REST API. Custom-module
 > endpoints (e.g. marketplace extensions) are intentionally out of scope.
@@ -52,8 +55,8 @@ admin token you obtain yourself. TLS verification is **on** by default; pass
 
 Every write method accepts **either** a fluent builder **or** a raw array, so you
 can opt into type-safety without giving up the array escape hatch. The builders
-(`Product`, `StockItem`, `Price`, `Category`, `MediaEntry`, `AttributeOption`)
-all implement `Arrayable`:
+(`Product`, `StockItem`, `Price`, `Category`, `MediaEntry`, `AttributeOption`,
+`Customer`, `Address`) all implement `Arrayable`:
 
 ```php
 use Baldie81\Magento2SDK\Support\Product;
@@ -275,6 +278,77 @@ $magento->configurables()->addChild('PARENT-SKU', 'CHILD-SKU-M');
 $magento->configurables()->children('PARENT-SKU');                  // list children
 $magento->configurables()->removeChild('PARENT-SKU', 'CHILD-SKU-S'); // unlink
 ```
+
+## Orders
+
+```php
+use Baldie81\Magento2SDK\Support\SearchCriteria;
+use Baldie81\Magento2SDK\Enum\OrderState;
+
+$order  = $magento->orders()->get(7);
+$status = $magento->orders()->getStatus(7); // OrderState enum, or raw string for custom statuses
+
+// Find orders to act on (paginates every page; see "Pagination"):
+$processing = $magento->orders()->searchAll(
+    SearchCriteria::create()->where('state', OrderState::Processing->value)
+);
+
+// Invoice — whole order, capturing payment online by default, returns the invoice id:
+$invoiceId = $magento->orders()->invoice(7);
+// …or a partial invoice without capture (e.g. an offline/authorize-only payment):
+$magento->orders()->invoice(7, [['order_item_id' => 11, 'qty' => 2]], capture: false, comment: 'Backorder split');
+
+// Ship — whole order or specific items, optionally with tracking, returns the shipment id:
+$shipmentId = $magento->orders()->ship(7,
+    items:  [['order_item_id' => 11, 'qty' => 1]],
+    tracks: [['track_number' => '1Z999', 'title' => 'UPS', 'carrier_code' => 'ups']],
+    notify: true,
+);
+
+// Cancel — returns false if Magento refuses (already invoiced/shipped/complete):
+$magento->orders()->cancel(7);
+```
+
+Order creation goes through the repository (`POST /V1/orders`); pass the full
+order entity (array or any `Arrayable`) and the SDK adds the `{"entity": …}`
+wrapper. Note Magento's own path quirk, preserved here: invoice/ship use the
+**singular** `V1/order/{id}/…` while get/create/cancel use plural `V1/orders`.
+
+## Customers
+
+```php
+use Baldie81\Magento2SDK\Support\Customer;
+use Baldie81\Magento2SDK\Support\Address;
+
+$customer = $magento->customers()->get(5);
+
+// Create an account. Pass a password, or omit it to email a "set password" link.
+$magento->customers()->create(
+    Customer::make('jane@example.com')
+        ->firstname('Jane')->lastname('Doe')->websiteId(1)->groupId(1)
+        ->address(
+            Address::make()
+                ->firstname('Jane')->lastname('Doe')
+                ->street(['123 Oak Ave'])->city('Austin')
+                ->region('Texas', regionId: 57)->postcode('78758')->countryId('US')
+                ->telephone('512-555-1111')
+                ->defaultBilling()->defaultShipping()
+        ),
+    password: 's3cret!',
+);
+
+// Update (repository save). Addresses are saved inline: send the full set you
+// want to keep, each existing one carrying its id.
+$magento->customers()->update(5, Customer::make('jane@example.com')->firstname('Janet'));
+
+$magento->customers()->searchAll(SearchCriteria::create()->where('group_id', 1));
+$magento->customers()->deleteAddress(12); // the one dedicated address route
+$magento->customers()->delete(5);
+```
+
+Addresses are not a separate write endpoint in core Magento — they live on the
+customer, so you add/edit them via `Customer::address()` and re-saving. Only
+deletion has its own route (`deleteAddress()`).
 
 ## Async bulk
 

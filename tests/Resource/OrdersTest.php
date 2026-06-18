@@ -6,6 +6,7 @@ namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
 use Baldie81\Magento2SDK\Enum\OrderState;
+use Baldie81\Magento2SDK\Support\OrderStatus;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 
@@ -20,22 +21,26 @@ final class OrdersTest extends MockClientTestCase
         self::assertSame('https://example.test/rest/V1/orders/7', (string) $this->lastRequest()->getUri());
     }
 
-    public function testGetStatusResolvesKnownStateToEnum(): void
+    public function testGetStatusReturnsOrderStatusBridgingToState(): void
     {
         $client = $this->mockClient([new Response(200, [], json_encode('processing'))]);
         $status = $client->orders()->getStatus(7);
 
-        self::assertSame(OrderState::Processing, $status);
+        self::assertInstanceOf(OrderStatus::class, $status);
+        self::assertSame('processing', $status->code());
+        self::assertSame(OrderState::Processing, $status->state());
         $request = $this->lastRequest();
         self::assertSame('GET', $request->getMethod());
         self::assertSame('https://example.test/rest/V1/orders/7/statuses', (string) $request->getUri());
     }
 
-    public function testGetStatusFallsBackToRawStringForCustomStatus(): void
+    public function testGetStatusWrapsCustomStatusWithNoState(): void
     {
         $client = $this->mockClient([new Response(200, [], json_encode('awaiting_pickup'))]);
+        $status = $client->orders()->getStatus(7);
 
-        self::assertSame('awaiting_pickup', $client->orders()->getStatus(7));
+        self::assertSame('awaiting_pickup', $status->code());
+        self::assertNull($status->state());
     }
 
     public function testCreateWrapsEntity(): void

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Baldie81\Magento2SDK\Resource;
 
-use Baldie81\Magento2SDK\Enum\OrderState;
 use Baldie81\Magento2SDK\Support\Arrayable;
+use Baldie81\Magento2SDK\Support\OrderStatus;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 
 /**
@@ -27,16 +27,14 @@ final class Orders extends AbstractResource
     }
 
     /**
-     * Fetch an order's current status. Magento returns the admin-configurable
-     * status code (e.g. "processing", "complete", "pending"); when it matches a
-     * known system {@see OrderState} the enum is returned, otherwise the raw
-     * string is — custom statuses have no enum case.
+     * Fetch an order's current status as an {@see OrderStatus} value object —
+     * Magento returns the admin-configurable status code, which {@see OrderStatus}
+     * pairs with a label and, where it coincides with a system state, an
+     * {@see \Baldie81\Magento2SDK\Enum\OrderState} (via {@see OrderStatus::state()}).
      */
-    public function getStatus(int $orderId): OrderState|string
+    public function getStatus(int $orderId): OrderStatus
     {
-        $status = (string) $this->http->get("V1/orders/{$orderId}/statuses");
-
-        return OrderState::tryFrom($status) ?? $status;
+        return OrderStatus::of((string) $this->http->get("V1/orders/{$orderId}/statuses"));
     }
 
     /**

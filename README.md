@@ -12,7 +12,7 @@ endpoints you actually reach for when integrating a catalog:
 - **Prices** — base prices and special (sale) prices
 - **Product media** — list / add / update / remove gallery entries
 - **Configurable products** — link & unlink simple children, manage option axes
-- **Orders** — get / search, create, invoice, ship, cancel
+- **Orders** — get / search, create, invoice, ship, cancel, status
 - **Customers** — get / search, create / update (with inline addresses), delete
 - **Async bulk API** — queue product batches (single or concurrent), poll status
 
@@ -283,10 +283,23 @@ $magento->configurables()->removeChild('PARENT-SKU', 'CHILD-SKU-S'); // unlink
 
 ```php
 use Baldie81\Magento2SDK\Support\SearchCriteria;
+use Baldie81\Magento2SDK\Support\OrderStatus;
 use Baldie81\Magento2SDK\Enum\OrderState;
 
-$order  = $magento->orders()->get(7);
-$status = $magento->orders()->getStatus(7); // OrderState enum, or raw string for custom statuses
+$order = $magento->orders()->get(7);
+
+// getStatus() returns an OrderStatus value object:
+$status = $magento->orders()->getStatus(7);
+$status->code();    // 'processing'
+$status->label();   // 'Processing'
+$status->state();   // OrderState::Processing (null for custom statuses)
+$status->equals(OrderStatus::PROCESSING); // true
+
+// Order statuses are admin-configurable, so they're a value object, not an
+// enum. Teach the SDK your store's custom statuses once at bootstrap (labels
+// optional) and they become "known":
+OrderStatus::register('awaiting_pickup', 'Awaiting Pickup');
+OrderStatus::registerMany(['in_transit' => 'In Transit', 'delivered' => null]);
 
 // Find orders to act on (paginates every page; see "Pagination"):
 $processing = $magento->orders()->searchAll(

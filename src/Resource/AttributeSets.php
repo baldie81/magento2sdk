@@ -12,6 +12,22 @@ use Baldie81\Magento2SDK\Support\SearchCriteria;
 final class AttributeSets extends AbstractResource
 {
     /**
+     * List attribute sets for an entity type (4 = catalog_product).
+     *
+     * @return list<array{attribute_set_id?:int,attribute_set_name?:string}>
+     */
+    public function all(int $entityTypeId = 4): array
+    {
+        $criteria = SearchCriteria::create()
+            ->where('entity_type_id', $entityTypeId)
+            ->pageSize(200);
+
+        $response = (array) $this->http->get('V1/eav/attribute-sets/list', $criteria->toArray());
+
+        return $response['items'] ?? [];
+    }
+
+    /**
      * List the attribute groups of a set (each carries an attribute_group_id you
      * can assign attributes into).
      *

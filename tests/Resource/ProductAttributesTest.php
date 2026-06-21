@@ -254,4 +254,30 @@ final class ProductAttributesTest extends MockClientTestCase
             $body['option']['store_labels'],
         );
     }
+
+    public function testUpdateSavesAttributeWithCodeInjected(): void
+    {
+        $client = $this->mockClient([new Response(200, [], (string) json_encode([
+            'attribute_code' => 'color', 'default_frontend_label' => 'Colour',
+        ]))]);
+
+        $result = $client->attributes()->update('color', ['default_frontend_label' => 'Colour']);
+
+        self::assertSame('Colour', $result['default_frontend_label']);
+        $request = $this->lastRequest();
+        self::assertSame('PUT', $request->getMethod());
+        self::assertStringContainsString('V1/products/attributes/color', (string) $request->getUri());
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertSame('Colour', $body['attribute']['default_frontend_label']);
+        self::assertSame('color', $body['attribute']['attribute_code']); // injected automatically
+    }
+
+    public function testDeleteDeletesAttribute(): void
+    {
+        $client = $this->mockClient([new Response(200, [], 'true')]);
+
+        self::assertTrue($client->attributes()->delete('color'));
+        self::assertSame('DELETE', $this->lastRequest()->getMethod());
+        self::assertStringContainsString('V1/products/attributes/color', (string) $this->lastRequest()->getUri());
+    }
 }

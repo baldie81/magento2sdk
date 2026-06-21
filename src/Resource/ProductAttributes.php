@@ -54,6 +54,35 @@ final class ProductAttributes extends AbstractResource
     }
 
     /**
+     * Update an existing attribute (e.g. its label). The attribute code is added
+     * to the payload automatically so Magento accepts the save.
+     *
+     * @param array<string,mixed> $attribute
+     * @return array<string,mixed>
+     */
+    public function update(string $attributeCode, array $attribute): array
+    {
+        if (($attribute['frontend_input'] ?? null) instanceof FrontendInput) {
+            $attribute['frontend_input'] = $attribute['frontend_input']->value;
+        }
+
+        $attribute['attribute_code'] ??= $attributeCode;
+
+        return (array) $this->http->put(
+            'V1/products/attributes/' . $this->segment($attributeCode),
+            ['attribute' => $attribute],
+        );
+    }
+
+    /**
+     * Delete an attribute by code.
+     */
+    public function delete(string $attributeCode): bool
+    {
+        return (bool) $this->http->delete('V1/products/attributes/' . $this->segment($attributeCode));
+    }
+
+    /**
      * Add one option to a selectable attribute. Returns the new option id
      * (Magento returns it as a bare string, e.g. "id_5").
      *

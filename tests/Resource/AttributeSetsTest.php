@@ -39,4 +39,55 @@ final class AttributeSetsTest extends MockClientTestCase
 
         self::assertSame('General', $groups[0]['attribute_group_name']);
     }
+
+    public function testCreateCreatesAttributeSet(): void
+    {
+        $client = $this->mockClient([new Response(200, [], (string) json_encode([
+            'attribute_set_id' => 11, 'attribute_set_name' => 'Footwear', 'entity_type_id' => 4,
+        ]))]);
+
+        $set = $client->attributeSets()->create('Footwear');
+
+        self::assertSame(11, $set['attribute_set_id']);
+        $request = $this->lastRequest();
+        self::assertSame('POST', $request->getMethod());
+        self::assertStringContainsString('V1/products/attribute-sets', (string) $request->getUri());
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertSame('Footwear', $body['attributeSet']['attribute_set_name']);
+        self::assertSame(4, $body['skeletonId']);
+    }
+
+    public function testDeleteDeletesAttributeSet(): void
+    {
+        $client = $this->mockClient([new Response(200, [], 'true')]);
+
+        self::assertTrue($client->attributeSets()->delete(11));
+        self::assertSame('DELETE', $this->lastRequest()->getMethod());
+        self::assertStringContainsString('V1/products/attribute-sets/11', (string) $this->lastRequest()->getUri());
+    }
+
+    public function testCreateGroupCreatesGroup(): void
+    {
+        $client = $this->mockClient([new Response(200, [], (string) json_encode([
+            'attribute_group_id' => 12, 'attribute_group_name' => 'Soles', 'attribute_set_id' => 11,
+        ]))]);
+
+        $group = $client->attributeSets()->createGroup(11, 'Soles');
+
+        self::assertSame(12, $group['attribute_group_id']);
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertSame('POST', $this->lastRequest()->getMethod());
+        self::assertStringContainsString('V1/products/attribute-sets/groups', (string) $this->lastRequest()->getUri());
+        self::assertSame('Soles', $body['group']['attribute_group_name']);
+        self::assertSame(11, $body['group']['attribute_set_id']);
+    }
+
+    public function testDeleteGroupDeletesGroup(): void
+    {
+        $client = $this->mockClient([new Response(200, [], 'true')]);
+
+        self::assertTrue($client->attributeSets()->deleteGroup(12));
+        self::assertSame('DELETE', $this->lastRequest()->getMethod());
+        self::assertStringContainsString('V1/products/attribute-sets/groups/12', (string) $this->lastRequest()->getUri());
+    }
 }

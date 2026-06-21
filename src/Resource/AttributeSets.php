@@ -72,4 +72,51 @@ final class AttributeSets extends AbstractResource
             'sortOrder'        => $sortOrder,
         ]);
     }
+
+    /**
+     * Create a new attribute set, cloned from a skeleton set (4 = Default).
+     *
+     * @return array<string,mixed> the created set (carries attribute_set_id)
+     */
+    public function create(string $name, int $skeletonId = 4, int $sortOrder = 0): array
+    {
+        return (array) $this->http->post('V1/products/attribute-sets', [
+            'attributeSet' => [
+                'attribute_set_name' => $name,
+                'sort_order'         => $sortOrder,
+            ],
+            'skeletonId' => $skeletonId,
+        ]);
+    }
+
+    /**
+     * Delete an attribute set (also removes its groups).
+     */
+    public function delete(int $attributeSetId): bool
+    {
+        return (bool) $this->http->delete("V1/products/attribute-sets/{$attributeSetId}");
+    }
+
+    /**
+     * Create an attribute group within a set.
+     *
+     * @return array<string,mixed> the created group (carries attribute_group_id)
+     */
+    public function createGroup(int $attributeSetId, string $name): array
+    {
+        return (array) $this->http->post('V1/products/attribute-sets/groups', [
+            'group' => [
+                'attribute_group_name' => $name,
+                'attribute_set_id'     => $attributeSetId,
+            ],
+        ]);
+    }
+
+    /**
+     * Delete an attribute group.
+     */
+    public function deleteGroup(int $attributeGroupId): bool
+    {
+        return (bool) $this->http->delete("V1/products/attribute-sets/groups/{$attributeGroupId}");
+    }
 }

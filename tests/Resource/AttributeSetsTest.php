@@ -90,4 +90,20 @@ final class AttributeSetsTest extends MockClientTestCase
         self::assertSame('DELETE', $this->lastRequest()->getMethod());
         self::assertStringContainsString('V1/products/attribute-sets/groups/12', (string) $this->lastRequest()->getUri());
     }
+
+    public function testSetGroupSortOrderUsesExtensionAttributes(): void
+    {
+        $client = $this->mockClient([new Response(200, [], (string) json_encode([
+            'attribute_group_id' => 7, 'attribute_group_name' => 'General', 'attribute_set_id' => 9,
+        ]))]);
+
+        $client->attributeSets()->setGroupSortOrder(7, 9, 'General', 3);
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertSame('POST', $this->lastRequest()->getMethod());
+        self::assertStringContainsString('V1/products/attribute-sets/groups', (string) $this->lastRequest()->getUri());
+        self::assertSame(7, $body['group']['attribute_group_id']);
+        self::assertSame('General', $body['group']['attribute_group_name']);
+        self::assertSame(3, $body['group']['extension_attributes']['sort_order']);
+    }
 }

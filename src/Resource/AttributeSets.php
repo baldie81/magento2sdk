@@ -119,4 +119,23 @@ final class AttributeSets extends AbstractResource
     {
         return (bool) $this->http->delete("V1/products/attribute-sets/groups/{$attributeGroupId}");
     }
+
+    /**
+     * Set a group's position within its set. Magento only accepts the position as
+     * `sort_order` under `extension_attributes` (a top-level `sort_order` is
+     * rejected); lower sorts first. The name is required by the save endpoint.
+     *
+     * @return array<string,mixed>
+     */
+    public function setGroupSortOrder(int $attributeGroupId, int $attributeSetId, string $name, int $sortOrder): array
+    {
+        return (array) $this->http->post('V1/products/attribute-sets/groups', [
+            'group' => [
+                'attribute_group_id'   => $attributeGroupId,
+                'attribute_group_name' => $name,
+                'attribute_set_id'     => $attributeSetId,
+                'extension_attributes' => ['sort_order' => $sortOrder],
+            ],
+        ]);
+    }
 }

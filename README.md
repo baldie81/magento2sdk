@@ -491,8 +491,11 @@ global value, use Magento's `all` store code: `$magento->forStore('all')`.
 
 ```bash
 composer install
-composer test
+composer test      # PHPUnit
+composer analyse   # PHPStan (level 8 on src/, see phpstan.neon.dist)
 ```
+
+CI runs both on every supported PHP version.
 
 ## License
 

@@ -17,7 +17,7 @@ final class ConfigurableProducts extends AbstractResource
      */
     public function children(string $sku): array
     {
-        return (array) $this->http->get('V1/configurable-products/' . $this->segment($sku) . '/children');
+        return $this->rows($this->http->get('V1/configurable-products/' . $this->segment($sku) . '/children'));
     }
 
     /**
@@ -49,7 +49,7 @@ final class ConfigurableProducts extends AbstractResource
      */
     public function options(string $sku): array
     {
-        return (array) $this->http->get('V1/configurable-products/' . $this->segment($sku) . '/options/all');
+        return $this->rows($this->http->get('V1/configurable-products/' . $this->segment($sku) . '/options/all'));
     }
 
     /**

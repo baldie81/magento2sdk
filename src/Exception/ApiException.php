@@ -75,8 +75,9 @@ final class ApiException extends MagentoException
 
     public static function fromRequestException(RequestException $e): self
     {
-        if ($e->hasResponse()) {
-            return self::fromResponse($e->getResponse(), $e);
+        $response = $e->getResponse();
+        if ($response !== null) {
+            return self::fromResponse($response, $e);
         }
 
         return new self($e->getMessage(), 0, null, [], $e);
@@ -154,6 +155,8 @@ final class ApiException extends MagentoException
             true,
         );
 
-        return mb_convert_encoding($body, 'UTF-8', $detected !== false ? $detected : 'ISO-8859-1');
+        $converted = mb_convert_encoding($body, 'UTF-8', $detected !== false ? $detected : 'ISO-8859-1');
+
+        return $converted !== false ? $converted : $body;
     }
 }

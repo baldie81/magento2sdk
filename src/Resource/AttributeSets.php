@@ -39,11 +39,11 @@ final class AttributeSets extends AbstractResource
     /**
      * List the attributes currently assigned to a set.
      *
-     * @return list<array{attribute_code?:string}>
+     * @return list<array<string,mixed>> each attribute carries its `attribute_code`
      */
     public function attributes(int $attributeSetId): array
     {
-        return (array) ($this->http->get("V1/products/attribute-sets/{$attributeSetId}/attributes") ?? []);
+        return $this->rows($this->http->get("V1/products/attribute-sets/{$attributeSetId}/attributes"));
     }
 
     /**

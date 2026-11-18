@@ -61,6 +61,6 @@ final class Prices extends AbstractResource
      */
     public function specialPrices(array $skus): array
     {
-        return (array) $this->http->post('V1/products/special-price-information', ['skus' => array_values($skus)]);
+        return $this->rows($this->http->post('V1/products/special-price-information', ['skus' => array_values($skus)]));
     }
 }

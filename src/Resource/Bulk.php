@@ -82,7 +82,7 @@ final class Bulk extends AbstractResource
             $wrapped[] = $product instanceof Product ? ['product' => $product->toArray()] : $product;
         }
 
-        return array_values($wrapped);
+        return $wrapped;
     }
 
     /**

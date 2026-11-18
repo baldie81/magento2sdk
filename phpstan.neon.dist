@@ -1,0 +1,8 @@
+parameters:
+    level: 8
+    paths:
+        - src
+    # PHPDoc shapes (list<...>, array{...}) describe intent but aren't enforced
+    # at runtime, so defensive normalisation such as array_values() on a
+    # documented list is deliberate rather than dead code.
+    treatPhpDocTypesAsCertain: false

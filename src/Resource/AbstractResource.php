@@ -67,6 +67,25 @@ abstract class AbstractResource
     }
 
     /**
+     * Normalise the response of an endpoint that returns a bare JSON list of
+     * entities: anything that isn't a list of objects yields no rows rather
+     * than a bogus one.
+     *
+     * @return list<array<string,mixed>>
+     */
+    protected function rows(mixed $response): array
+    {
+        $rows = [];
+        foreach (is_array($response) ? $response : [] as $row) {
+            if (is_array($row)) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
      * Fetch every page of a list/search endpoint and return the merged `items`.
      *
      * Magento caps the page size regardless of what you request, so a single

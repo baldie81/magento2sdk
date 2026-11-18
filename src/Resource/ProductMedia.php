@@ -18,7 +18,7 @@ final class ProductMedia extends AbstractResource
      */
     public function entries(string $sku): array
     {
-        return (array) $this->http->get('V1/products/' . $this->segment($sku) . '/media');
+        return $this->rows($this->http->get('V1/products/' . $this->segment($sku) . '/media'));
     }
 
     /**

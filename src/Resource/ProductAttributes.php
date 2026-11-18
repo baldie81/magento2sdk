@@ -31,11 +31,11 @@ final class ProductAttributes extends AbstractResource
     }
 
     /**
-     * @return list<array{label?:string,value?:string}>
+     * @return list<array<string,mixed>> each option carries `label` and `value` (the option id)
      */
     public function options(string $attributeCode): array
     {
-        return (array) ($this->http->get('V1/products/attributes/' . $this->segment($attributeCode) . '/options') ?? []);
+        return $this->rows($this->http->get('V1/products/attributes/' . $this->segment($attributeCode) . '/options'));
     }
 
     /**
@@ -166,9 +166,9 @@ final class ProductAttributes extends AbstractResource
             // Always read through the unscoped path: under "rest/<store>/" the
             // labels are that store view's translations, which would never
             // match the labels callers look options up by.
-            $options = (array) ($this->http->unscoped()->get(
+            $options = $this->rows($this->http->unscoped()->get(
                 'V1/products/attributes/' . $this->segment($attributeCode) . '/options',
-            ) ?? []);
+            ));
 
             $map = [];
             foreach ($options as $option) {

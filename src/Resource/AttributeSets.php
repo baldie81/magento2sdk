@@ -18,13 +18,9 @@ final class AttributeSets extends AbstractResource
      */
     public function all(int $entityTypeId = 4): array
     {
-        $criteria = SearchCriteria::create()
-            ->where('entity_type_id', $entityTypeId)
-            ->pageSize(200);
+        $criteria = SearchCriteria::create()->where('entity_type_id', $entityTypeId);
 
-        $response = (array) $this->http->get('V1/eav/attribute-sets/list', $criteria->toArray());
-
-        return $response['items'] ?? [];
+        return $this->paginateItems('V1/eav/attribute-sets/list', $criteria);
     }
 
     /**
@@ -35,13 +31,9 @@ final class AttributeSets extends AbstractResource
      */
     public function groups(int $attributeSetId): array
     {
-        $criteria = SearchCriteria::create()
-            ->where('attribute_set_id', $attributeSetId)
-            ->pageSize(200);
+        $criteria = SearchCriteria::create()->where('attribute_set_id', $attributeSetId);
 
-        $response = (array) $this->http->get('V1/products/attribute-sets/groups/list', $criteria->toArray());
-
-        return $response['items'] ?? [];
+        return $this->paginateItems('V1/products/attribute-sets/groups/list', $criteria);
     }
 
     /**

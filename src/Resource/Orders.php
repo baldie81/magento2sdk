@@ -57,7 +57,7 @@ final class Orders extends AbstractResource
      */
     public function searchAll(SearchCriteria $criteria, int $pageSize = self::MAX_PAGE_SIZE): array
     {
-        return $this->paginateItems('V1/orders', $criteria, $pageSize);
+        return $this->paginateItems('V1/orders', $criteria, $pageSize, 'entity_id');
     }
 
     /**

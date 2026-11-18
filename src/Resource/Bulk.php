@@ -6,6 +6,7 @@ namespace Baldie81\Magento2SDK\Resource;
 
 use GuzzleHttp\Promise\Utils;
 use Baldie81\Magento2SDK\Exception\ApiException;
+use Baldie81\Magento2SDK\Exception\MagentoException;
 use Baldie81\Magento2SDK\Support\Product;
 
 /**
@@ -50,8 +51,12 @@ final class Bulk extends AbstractResource
 
             foreach (Utils::settle($promises)->wait() as $i => $outcome) {
                 if (($outcome['state'] ?? '') === 'fulfilled') {
-                    $body        = $this->http->decode($outcome['value']);
-                    $results[$i] = ['bulk_uuid' => is_array($body) ? ($body['bulk_uuid'] ?? null) : null];
+                    try {
+                        $body        = $this->http->decode($outcome['value']);
+                        $results[$i] = ['bulk_uuid' => is_array($body) ? ($body['bulk_uuid'] ?? null) : null];
+                    } catch (MagentoException $e) {
+                        $results[$i] = ['error' => $e->getMessage()];
+                    }
                 } else {
                     $results[$i] = ['error' => ApiException::describe($outcome['reason'] ?? null)];
                 }

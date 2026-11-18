@@ -48,6 +48,22 @@ final class ApiException extends MagentoException
 
         if (is_array($decoded) && isset($decoded['message']) && is_string($decoded['message'])) {
             $message = self::interpolate($decoded['message'], self::collectReplacements($decoded));
+
+            // Validation failures carry the individual problems in a nested
+            // `errors` list; append them so the message says what was wrong.
+            $details = [];
+            foreach (is_array($decoded['errors'] ?? null) ? $decoded['errors'] : [] as $error) {
+                if (!is_array($error) || !is_string($error['message'] ?? null)) {
+                    continue;
+                }
+                $detail = self::interpolate($error['message'], self::collectReplacements($error));
+                if ($detail !== '' && $detail !== $message && !in_array($detail, $details, true)) {
+                    $details[] = $detail;
+                }
+            }
+            if ($details !== []) {
+                $message = trim($message . ' ' . implode(' ', $details));
+            }
         } elseif ($body !== '') {
             $message = mb_substr($body, 0, 500);
         } else {

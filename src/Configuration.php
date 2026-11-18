@@ -26,6 +26,7 @@ final class Configuration
      */
     public function __construct(
         public readonly string $baseUrl,
+        #[\SensitiveParameter]
         public readonly string $token,
         public readonly float $timeout = 30.0,
         public readonly float $connectTimeout = 10.0,
@@ -54,7 +55,7 @@ final class Configuration
      */
     public function restPrefix(): string
     {
-        $code = $this->storeCode !== null ? trim($this->storeCode) : '';
+        $code = $this->storeCode !== null ? trim($this->storeCode, "/ \t\n\r\0\x0B") : '';
 
         return $code !== '' ? "rest/{$code}/" : 'rest/';
     }

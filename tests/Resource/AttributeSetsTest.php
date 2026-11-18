@@ -26,6 +26,23 @@ final class AttributeSetsTest extends MockClientTestCase
         self::assertStringContainsString('V1/eav/attribute-sets/list', (string) $this->lastRequest()->getUri());
     }
 
+    public function testAllWalksEveryPage(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], (string) json_encode([
+                'items'       => array_fill(0, 300, ['attribute_set_id' => 1]),
+                'total_count' => 301,
+            ])),
+            new Response(200, [], (string) json_encode([
+                'items'       => [['attribute_set_id' => 2]],
+                'total_count' => 301,
+            ])),
+        ]);
+
+        self::assertCount(301, $client->attributeSets()->all());
+        self::assertCount(2, $this->history);
+    }
+
     public function testGroupsListsGroupsForASet(): void
     {
         $client = $this->mockClient([new Response(200, [], (string) json_encode([

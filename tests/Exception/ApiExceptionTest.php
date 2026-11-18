@@ -58,6 +58,23 @@ final class ApiExceptionTest extends TestCase
         self::assertSame('Items A and B differ', $exception->getMessage());
     }
 
+    public function testAppendsNestedValidationErrors(): void
+    {
+        $response = new Response(400, [], json_encode([
+            'message' => 'One or more input exceptions have occurred.',
+            'errors'  => [
+                ['message' => '"%fieldName" is required. Enter and try again.', 'parameters' => ['fieldName' => 'firstname']],
+                ['message' => 'Invalid value of "%value" provided for the %fieldName field.', 'parameters' => ['value' => 'x', 'fieldName' => 'email']],
+            ],
+        ]));
+
+        self::assertSame(
+            'One or more input exceptions have occurred. "firstname" is required. Enter and try again.'
+            . ' Invalid value of "x" provided for the email field.',
+            ApiException::fromResponse($response)->getMessage(),
+        );
+    }
+
     public function testConvertsNonUtf8BodyToUtf8(): void
     {
         $utf8  = json_encode(['message' => 'Σφάλμα προϊόντος'], JSON_UNESCAPED_UNICODE);

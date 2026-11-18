@@ -95,7 +95,7 @@ final class Products extends AbstractResource
      */
     public function searchAll(SearchCriteria $criteria, int $pageSize = self::MAX_PAGE_SIZE): array
     {
-        return $this->paginateItems('V1/products', $criteria, $pageSize);
+        return $this->paginateItems('V1/products', $criteria, $pageSize, 'entity_id');
     }
 
     /**
@@ -103,21 +103,42 @@ final class Products extends AbstractResource
      *
      * The `sku in (...)` value and the result page are both capped on Magento
      * (long URIs 414; pageSize is bounded server-side), so the SKUs are chunked
-     * and each chunk is paginated until a short page signals the end.
+     * and each chunk is paginated until everything is collected.
+     *
+     * The `in` set is comma-separated with no way to escape a comma, so SKUs
+     * that contain one are looked up separately with OR'd `eq` filters.
      *
      * @param list<string> $skus
      * @return array<string,int> sku => entity id
      */
     public function searchBySkus(array $skus, int $chunkSize = self::MAX_PAGE_SIZE): array
     {
+        $chunkSize = max(1, $chunkSize);
+        $plain     = [];
+        $withComma = [];
+        foreach (array_unique(array_map('strval', $skus)) as $sku) {
+            if (str_contains($sku, ',')) {
+                $withComma[] = $sku;
+            } else {
+                $plain[] = $sku;
+            }
+        }
+
+        $searches = [];
+        foreach (array_chunk($plain, $chunkSize) as $chunk) {
+            $searches[] = SearchCriteria::create()->where('sku', $chunk, 'in');
+        }
+        // Three query parameters per filter here, so keep these groups small.
+        foreach (array_chunk($withComma, min($chunkSize, 50)) as $chunk) {
+            $searches[] = SearchCriteria::create()
+                ->whereAny(array_map(static fn (string $sku) => ['sku', $sku], $chunk));
+        }
+
         $map = [];
+        foreach ($searches as $criteria) {
+            $criteria->fields('items[id,sku]', 'total_count');
 
-        foreach (array_chunk(array_values($skus), max(1, $chunkSize)) as $chunk) {
-            $criteria = SearchCriteria::create()
-                ->where('sku', $chunk, 'in')
-                ->fields('items[id,sku]');
-
-            foreach ($this->paginateItems('V1/products', $criteria, $chunkSize) as $item) {
+            foreach ($this->paginateItems('V1/products', $criteria, $chunkSize, 'entity_id') as $item) {
                 if (isset($item['sku'], $item['id'])) {
                     $map[(string) $item['sku']] = (int) $item['id'];
                 }

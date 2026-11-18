@@ -11,6 +11,7 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Promise\PromiseInterface;
 use Baldie81\Magento2SDK\Exception\ApiException;
 use Baldie81\Magento2SDK\Exception\TransportException;
+use JsonException;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -35,6 +36,18 @@ final class HttpClient
     public function withRestPrefix(string $restPrefix): self
     {
         return new self($this->client, $restPrefix);
+    }
+
+    /**
+     * A clone with any store-view segment dropped from the REST prefix
+     * ("rest/<store>/" becomes "rest/"); returns this instance when the prefix
+     * is already unscoped.
+     */
+    public function unscoped(): self
+    {
+        $prefix = preg_replace('~(^|/)rest/[^/]+/$~', '$1rest/', $this->restPrefix) ?? $this->restPrefix;
+
+        return $prefix === $this->restPrefix ? $this : new self($this->client, $prefix);
     }
 
     /**
@@ -80,22 +93,37 @@ final class HttpClient
      */
     public function postAsync(string $path, array $body = []): PromiseInterface
     {
-        return $this->client->requestAsync('POST', $this->uri($path), ['json' => $body]);
+        return $this->client->requestAsync('POST', $this->uri($path), ['json' => $body, 'http_errors' => true]);
     }
 
     /**
      * Decode a PSR-7 response body as JSON. Returns null for an empty body and
      * preserves scalars (some Magento endpoints return a bare string/int/bool).
+     *
+     * @throws ApiException when the body is not valid JSON (e.g. an HTML
+     *                      maintenance or firewall page served with a 2xx status)
      */
     public function decode(ResponseInterface $response): mixed
     {
         $body = (string) $response->getBody();
 
-        if ($body === '') {
+        if (trim($body) === '') {
             return null;
         }
 
-        return json_decode($body, true);
+        try {
+            return json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            $status = $response->getStatusCode();
+
+            throw new ApiException(
+                "Magento returned a non-JSON response (HTTP {$status}): " . mb_substr(trim($body), 0, 200),
+                $status,
+                $body,
+                [],
+                $e,
+            );
+        }
     }
 
     /**
@@ -104,11 +132,19 @@ final class HttpClient
      */
     private function request(string $method, string $path, array $options = []): mixed
     {
+        // Forced on so a caller-supplied Guzzle client configured with
+        // http_errors=false can't turn 4xx/5xx bodies into "successful" results.
+        $options['http_errors'] = true;
+
         try {
             $response = $this->client->request($method, $this->uri($path), $options);
         } catch (ConnectException $e) {
             throw new TransportException($e->getMessage(), 0, $e);
         } catch (RequestException $e) {
+            if (!$e->hasResponse()) {
+                throw new TransportException($e->getMessage(), 0, $e);
+            }
+
             throw ApiException::fromRequestException($e);
         } catch (GuzzleException $e) {
             throw new TransportException($e->getMessage(), 0, $e);

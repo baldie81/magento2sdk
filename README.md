@@ -149,8 +149,16 @@ condition are comma-joined for you.
 Magento caps `searchCriteria[pageSize]` server-side (300 by default) and
 silently truncates anything larger — so a single `search()` can quietly miss
 results. The `searchAll()` / `listFlat()` methods walk every page for you
-(capping the page size at 300, using `total_count` to know when to stop) and
-return the merged `items`:
+(capping the page size at 300) and return the merged `items`. `total_count`
+decides when to stop when the response carries it — so a store with a lower
+page-size cap still yields everything — and an empty or repeated page always
+ends the walk (Magento answers an out-of-range page with the last page again).
+If your criteria has no sort, a stable one (the entity id / attribute code) is
+added so pages don't shift while data changes. If a store rejects that default
+sort, the walk is retried without it and an `E_USER_WARNING` names the endpoint
+and Magento's error, so the search still succeeds; set your own `->sort()` to
+choose the order (a sort you set yourself is never retried — its error is
+thrown as usual):
 
 ```php
 $products   = $magento->products()->searchAll($criteria);   // list of items
@@ -159,7 +167,10 @@ $categories = $magento->categories()->listFlat();            // every category
 ```
 
 `searchBySkus()` paginates the same way (and additionally chunks the SKU set so
-the `sku in (...)` filter never overflows the URL).
+the `sku in (...)` filter never overflows the URL). SKUs containing a comma
+can't go in an `in` set, so they are looked up with `eq` filters instead.
+
+`attributeSets()->all()` and `->groups()` walk every page too.
 
 ## Attributes & attribute sets
 
@@ -208,7 +219,14 @@ $ids = $magento->attributes()->ensureOptions('color', [
     'Blue',
     AttributeOption::create('Green')->withStoreLabel(1, 'Verde'),
 ]);
-// $ids === ['Red' => '5', 'Blue' => '3', 'Green' => 'id_9']
+// $ids === ['Red' => '5', 'Blue' => '3', 'Green' => '9']
+//
+// Option ids are always the real id ("9"), usable directly as an attribute
+// value — whatever the Magento version returns from the create call ("id_9",
+// "9" or just true) is normalised for you.
+//
+// Lookups match against the labels of the unscoped (`rest/V1`) option list,
+// even on a store-scoped client, so translations never cause duplicates.
 
 // The low-level map is still available if you want to drive it yourself:
 $existing = $magento->attributes()->optionMap('color'); // ['red' => '5', ...]
@@ -365,7 +383,8 @@ $magento->customers()->create(
 );
 
 // Update (repository save). Addresses are saved inline: send the full set you
-// want to keep, each existing one carrying its id.
+// want to keep, each existing one carrying its id. The customer id is added to
+// the payload for you.
 $magento->customers()->update(5, Customer::make('jane@example.com')->firstname('Janet'));
 
 $magento->customers()->searchAll(SearchCriteria::create()->where('group_id', 1));
@@ -412,7 +431,9 @@ Every failure is a `Baldie81\Magento2SDK\Exception\MagentoException`:
 
 - `ApiException` — Magento returned 4xx/5xx. Exposes `->statusCode`,
   `->rawBody`, `->parameters`, and a message with Magento's `%1`/`%name`
-  placeholders already interpolated.
+  placeholders already interpolated (nested validation `errors` are appended).
+  Also thrown when a 2xx response isn't valid JSON — e.g. an HTML maintenance
+  or firewall page — rather than returning an empty result.
 - `TransportException` — connection/timeout/TLS failure, no HTTP response.
 
 ```php
@@ -439,6 +460,9 @@ $guzzle  = new Client([/* base_uri, handler stack, ... */]);
 $magento = MagentoClient::fromGuzzle($guzzle, restPrefix: 'rest/');
 ```
 
+Error statuses always raise an `ApiException`, even if your client sets
+`http_errors` to `false`.
+
 ## Store scoping
 
 Store-specific values are saved by hitting the store-scoped REST path
@@ -456,6 +480,10 @@ same transport and leaves the original (default-scope) client untouched:
 $magento->products()->create(Product::make('SKU-1')->name('Dress')->attributeSetId(4)->type('simple'));
 $magento->forStore('fr')->products()->update('SKU-1', Product::make('SKU-1')->name('Robe'));
 ```
+
+Note that the plain `rest/V1` path runs in the context of the default store
+view. If a write through it ends up as a store-view override instead of the
+global value, use Magento's `all` store code: `$magento->forStore('all')`.
 
 (Multi-language *option* labels are separate — see `AttributeOption::withStoreLabel()`.)
 

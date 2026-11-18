@@ -50,7 +50,7 @@ final class Categories extends AbstractResource
         $criteria ??= SearchCriteria::create()
             ->fields('items[id,name,parent_id]', 'total_count');
 
-        return $this->paginateItems('V1/categories/list', $criteria);
+        return $this->paginateItems('V1/categories/list', $criteria, self::MAX_PAGE_SIZE, 'entity_id');
     }
 
     /**

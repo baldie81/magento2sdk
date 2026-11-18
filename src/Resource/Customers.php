@@ -44,7 +44,7 @@ final class Customers extends AbstractResource
      */
     public function searchAll(SearchCriteria $criteria, int $pageSize = self::MAX_PAGE_SIZE): array
     {
-        return $this->paginateItems('V1/customers/search', $criteria, $pageSize);
+        return $this->paginateItems('V1/customers/search', $criteria, $pageSize, 'entity_id');
     }
 
     /**
@@ -69,15 +69,20 @@ final class Customers extends AbstractResource
     /**
      * Update a customer through the repository. Magento replaces the customer's
      * address book with the `addresses` you send, so pass the full set you want
-     * to keep (each existing address carrying its `id`). Returns the saved
-     * customer entity.
+     * to keep (each existing address carrying its `id`). The customer id is
+     * added to the payload automatically: older Magento releases ignore the id
+     * in the URL and would otherwise try to create a new customer. Returns the
+     * saved customer entity.
      *
      * @param Customer|array<string,mixed> $customer
      * @return array<string,mixed>
      */
     public function update(int $customerId, Customer|array $customer): array
     {
-        return (array) $this->http->put("V1/customers/{$customerId}", ['customer' => $this->payload($customer)]);
+        $payload = $this->payload($customer);
+        $payload['id'] ??= $customerId;
+
+        return (array) $this->http->put("V1/customers/{$customerId}", ['customer' => $payload]);
     }
 
     public function delete(int $customerId): bool

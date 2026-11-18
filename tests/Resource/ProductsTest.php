@@ -6,6 +6,7 @@ namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
 use Baldie81\Magento2SDK\Enum\ProductStatus;
+use Baldie81\Magento2SDK\Exception\ApiException;
 use Baldie81\Magento2SDK\Support\Product;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
@@ -47,7 +48,7 @@ final class ProductsTest extends MockClientTestCase
                 ['sku' => 'S1', 'id' => 11],
                 ['sku' => 'S2', 'id' => 12],
             ]])),
-            // page 2: short page -> stop
+            // page 2: empty page -> stop
             new Response(200, [], json_encode(['items' => []])),
         ]);
 
@@ -77,6 +78,146 @@ final class ProductsTest extends MockClientTestCase
 
         parse_str((string) $this->history[1]['request']->getUri()->getQuery(), $page2);
         self::assertSame('2', $page2['searchCriteria']['currentPage']);
+    }
+
+    public function testSearchBySkusStopsAfterOnePageWhenTotalCountIsReached(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], json_encode([
+                'items'       => [['sku' => 'S1', 'id' => 11], ['sku' => 'S2', 'id' => 12]],
+                'total_count' => 2,
+            ])),
+        ]);
+
+        $map = $client->products()->searchBySkus(['S1', 'S2'], 2);
+
+        self::assertSame(['S1' => 11, 'S2' => 12], $map);
+        self::assertCount(1, $this->history);
+        parse_str((string) $this->lastRequest()->getUri()->getQuery(), $query);
+        self::assertSame('items[id,sku],total_count', $query['fields']);
+    }
+
+    public function testSearchBySkusLooksUpSkusContainingACommaWithEqFilters(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], json_encode(['items' => [['sku' => 'S1', 'id' => 11]], 'total_count' => 1])),
+            new Response(200, [], json_encode(['items' => [['sku' => 'A,B', 'id' => 12]], 'total_count' => 1])),
+        ]);
+
+        $map = $client->products()->searchBySkus(['S1', 'A,B']);
+
+        self::assertSame(['S1' => 11, 'A,B' => 12], $map);
+        parse_str((string) $this->history[0]['request']->getUri()->getQuery(), $first);
+        self::assertSame('S1', $first['searchCriteria']['filterGroups'][0]['filters'][0]['value']);
+        self::assertSame('in', $first['searchCriteria']['filterGroups'][0]['filters'][0]['conditionType']);
+        parse_str((string) $this->history[1]['request']->getUri()->getQuery(), $second);
+        self::assertSame('A,B', $second['searchCriteria']['filterGroups'][0]['filters'][0]['value']);
+        self::assertSame('eq', $second['searchCriteria']['filterGroups'][0]['filters'][0]['conditionType']);
+    }
+
+    public function testSearchAllStopsWhenMagentoRepeatsTheLastPage(): void
+    {
+        // No total_count, and Magento answers an out-of-range page with the
+        // last page again instead of an empty one.
+        $page   = ['items' => [['sku' => 'a'], ['sku' => 'b']]];
+        $client = $this->mockClient([
+            new Response(200, [], json_encode($page)),
+            new Response(200, [], json_encode($page)),
+        ]);
+
+        $items = $client->products()->searchAll(SearchCriteria::create()->fields('items[sku]'), 2);
+
+        self::assertCount(2, $items);
+        self::assertCount(2, $this->history);
+    }
+
+    public function testSearchAllKeepsGoingPastAShortPageWhileTotalCountSaysThereIsMore(): void
+    {
+        // A store whose page-size cap is below what was requested.
+        $client = $this->mockClient([
+            new Response(200, [], json_encode(['items' => array_fill(0, 100, ['sku' => 'a']), 'total_count' => 150])),
+            new Response(200, [], json_encode(['items' => array_fill(0, 50, ['sku' => 'b']), 'total_count' => 150])),
+        ]);
+
+        self::assertCount(150, $client->products()->searchAll(SearchCriteria::create()));
+        self::assertCount(2, $this->history);
+    }
+
+    public function testSearchAllAddsAStableSortOnlyWhenTheCallerSetNone(): void
+    {
+        $empty  = json_encode(['items' => [], 'total_count' => 0]);
+        $client = $this->mockClient([new Response(200, [], $empty), new Response(200, [], $empty)]);
+
+        $client->products()->searchAll(SearchCriteria::create());
+        parse_str((string) $this->lastRequest()->getUri()->getQuery(), $query);
+        self::assertSame('entity_id', $query['searchCriteria']['sortOrders'][0]['field']);
+
+        $client->products()->searchAll(SearchCriteria::create()->sort('sku', 'DESC'));
+        parse_str((string) $this->lastRequest()->getUri()->getQuery(), $query);
+        self::assertCount(1, $query['searchCriteria']['sortOrders']);
+        self::assertSame('sku', $query['searchCriteria']['sortOrders'][0]['field']);
+    }
+
+    public function testSearchAllRetriesWithoutTheDefaultSortAndWarnsWhenItIsRejected(): void
+    {
+        $ok     = json_encode(['items' => [['sku' => 'a']], 'total_count' => 1]);
+        $client = $this->mockClient([
+            new Response(400, [], json_encode(['message' => 'Invalid attribute name: entity_id'])),
+            new Response(200, [], $ok),
+            new Response(200, [], $ok), // second walk: no sort, no retry
+        ]);
+
+        $warnings = [];
+        set_error_handler(static function (int $level, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        }, E_USER_WARNING);
+
+        try {
+            $first  = $client->products()->searchAll(SearchCriteria::create());
+            $second = $client->products()->searchAll(SearchCriteria::create());
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([['sku' => 'a']], $first);
+        self::assertSame([['sku' => 'a']], $second);
+        self::assertCount(3, $this->history);
+        parse_str((string) $this->history[1]['request']->getUri()->getQuery(), $retry);
+        self::assertArrayNotHasKey('sortOrders', $retry['searchCriteria']);
+        parse_str((string) $this->history[2]['request']->getUri()->getQuery(), $later);
+        self::assertArrayNotHasKey('sortOrders', $later['searchCriteria']);
+
+        self::assertCount(1, $warnings); // warned once, not on every walk
+        self::assertStringContainsString('default sort "entity_id" was rejected by V1/products', $warnings[0]);
+        self::assertStringContainsString('Invalid attribute name: entity_id', $warnings[0]);
+    }
+
+    public function testSearchAllStillThrowsWhenTheFailureIsNotTheDefaultSort(): void
+    {
+        $client = $this->mockClient([
+            new Response(401, [], json_encode(['message' => 'The consumer isn\'t authorized.'])),
+            new Response(401, [], json_encode(['message' => 'The consumer isn\'t authorized.'])),
+        ]);
+
+        $this->expectException(ApiException::class);
+        $this->expectExceptionMessage("The consumer isn't authorized.");
+        $client->products()->searchAll(SearchCriteria::create());
+    }
+
+    public function testSearchAllDoesNotRetryWhenTheCallerChoseTheSort(): void
+    {
+        $client = $this->mockClient([
+            new Response(400, [], json_encode(['message' => 'Invalid attribute name: nope'])),
+        ]);
+
+        try {
+            $client->products()->searchAll(SearchCriteria::create()->sort('nope'));
+            self::fail('Expected ApiException was not thrown.');
+        } catch (ApiException $e) {
+            self::assertCount(1, $this->history);
+        }
     }
 
     public function testSearchAllCapsRequestedPageSizeAtServerMax(): void

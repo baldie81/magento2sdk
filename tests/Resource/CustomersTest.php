@@ -62,6 +62,17 @@ final class CustomersTest extends MockClientTestCase
         $body = json_decode((string) $request->getBody(), true);
         self::assertSame(['1 A St'], $body['customer']['addresses'][0]['street']);
         self::assertTrue($body['customer']['addresses'][0]['default_billing']);
+        self::assertSame(5, $body['customer']['id']); // added from the URL id
+    }
+
+    public function testUpdateKeepsAnExplicitIdInThePayload(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode(['id' => 5]))]);
+
+        $client->customers()->update(5, ['id' => 5, 'email' => 'jane@example.com']);
+
+        $body = json_decode((string) $this->lastRequest()->getBody(), true);
+        self::assertSame(['id' => 5, 'email' => 'jane@example.com'], $body['customer']);
     }
 
     public function testSearchUsesDedicatedSearchPath(): void

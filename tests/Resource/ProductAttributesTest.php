@@ -63,7 +63,7 @@ final class ProductAttributesTest extends MockClientTestCase
 
         $id = $client->attributes()->ensureOption('color', AttributeOption::create('Black'));
 
-        self::assertSame('id_9', $id);
+        self::assertSame('9', $id);
         self::assertCount(2, $this->history);
         self::assertSame('POST', $this->history[1]['request']->getMethod());
     }
@@ -93,11 +93,11 @@ final class ProductAttributesTest extends MockClientTestCase
         );
     }
 
-    public function testUpsertOptionUpdatesExistingByRepostingWithItsValue(): void
+    public function testUpsertOptionUpdatesExistingThroughTheUpdateRoute(): void
     {
         $client = $this->mockClient([
             new Response(200, [], json_encode([['label' => 'Black', 'value' => '5']])),
-            new Response(200, [], json_encode('5')),
+            new Response(200, [], json_encode(true)),
         ]);
 
         $id = $client->attributes()->upsertOption('color',
@@ -107,10 +107,57 @@ final class ProductAttributesTest extends MockClientTestCase
         self::assertSame('5', $id);
         self::assertCount(2, $this->history);
         $request = $this->history[1]['request'];
+        self::assertSame('PUT', $request->getMethod());
+        self::assertStringEndsWith('V1/products/attributes/color/options/5', $request->getUri()->getPath());
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertSame('5', $body['option']['value']);
+        self::assertSame([['store_id' => 1, 'label' => 'Μαύρο']], $body['option']['store_labels']);
+    }
+
+    public function testUpsertOptionFallsBackToRepostWhenUpdateRouteIsMissing(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], json_encode([['label' => 'Black', 'value' => '5']])),
+            new Response(404, [], json_encode(['message' => 'Request does not match any route.'])),
+            new Response(200, [], json_encode('id_5')),
+        ]);
+
+        $id = $client->attributes()->upsertOption('color', AttributeOption::create('Black'));
+
+        self::assertSame('5', $id);
+        self::assertCount(3, $this->history);
+        $request = $this->history[2]['request'];
         self::assertSame('POST', $request->getMethod());
         $body = json_decode((string) $request->getBody(), true);
         self::assertSame('5', $body['option']['value']); // re-posted with the existing id => update
-        self::assertSame([['store_id' => 1, 'label' => 'Μαύρο']], $body['option']['store_labels']);
+    }
+
+    public function testAddOptionLooksTheIdUpWhenMagentoReturnsOnlyTrue(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], json_encode(true)), // older releases return a bare true
+            new Response(200, [], json_encode([['label' => 'Red', 'value' => '12']])),
+        ]);
+
+        self::assertSame('12', $client->attributes()->addOption('color', ['label' => 'Red']));
+    }
+
+    public function testAddOptionAcceptsAnAlreadyNumericId(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode('12'))]);
+
+        self::assertSame('12', $client->attributes()->addOption('color', ['label' => 'Red']));
+        self::assertCount(1, $this->history);
+    }
+
+    public function testOptionMapReadsThroughTheUnscopedPathOnAStoreScopedClient(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], json_encode([['label' => 'Black', 'value' => '5']])),
+        ]);
+
+        self::assertSame('5', $client->forStore('fr')->attributes()->findOption('color', 'black'));
+        self::assertSame('/rest/V1/products/attributes/color/options', $this->lastRequest()->getUri()->getPath());
     }
 
     public function testEnsureOptionsCreatesOnlyMissingWithOneLookup(): void
@@ -126,7 +173,7 @@ final class ProductAttributesTest extends MockClientTestCase
         $ids = $client->attributes()->ensureOptions('color', ['Black', 'white', 'Red']);
 
         // existing matched case-insensitively; only the missing one is created.
-        self::assertSame(['Black' => '5', 'white' => '3', 'Red' => 'id_9'], $ids);
+        self::assertSame(['Black' => '5', 'white' => '3', 'Red' => '9'], $ids);
         self::assertCount(2, $this->history); // 1 lookup + 1 create
         self::assertSame('GET', $this->history[0]['request']->getMethod());
         self::assertSame('POST', $this->history[1]['request']->getMethod());
@@ -141,7 +188,7 @@ final class ProductAttributesTest extends MockClientTestCase
 
         $ids = $client->attributes()->ensureOptions('color', ['Black', 'black', 'bLACK']);
 
-        self::assertSame(['Black' => 'id_1', 'black' => 'id_1', 'bLACK' => 'id_1'], $ids);
+        self::assertSame(['Black' => '1', 'black' => '1', 'bLACK' => '1'], $ids);
         self::assertCount(2, $this->history); // lookup + exactly one create
     }
 
@@ -195,8 +242,8 @@ final class ProductAttributesTest extends MockClientTestCase
         $first  = $attrs->ensureOptions('color', ['Black']);
         $second = $attrs->ensureOptions('color', ['black', 'White']); // 'black' hits cache
 
-        self::assertSame(['Black' => 'id_1'], $first);
-        self::assertSame(['black' => 'id_1', 'White' => 'id_2'], $second);
+        self::assertSame(['Black' => '1'], $first);
+        self::assertSame(['black' => '1', 'White' => '2'], $second);
         // 1 GET + 2 POSTs — crucially NOT a second options lookup.
         self::assertSame(['GET', 'POST', 'POST'], array_map(
             static fn ($t) => $t['request']->getMethod(),
@@ -228,7 +275,7 @@ final class ProductAttributesTest extends MockClientTestCase
 
         $id = $client->attributes()->upsertOption('color', AttributeOption::create('Black'));
 
-        self::assertSame('id_9', $id);
+        self::assertSame('9', $id);
         $body = json_decode((string) $this->history[1]['request']->getBody(), true);
         self::assertArrayNotHasKey('value', $body['option']); // a plain create, no id injected
     }
@@ -243,7 +290,7 @@ final class ProductAttributesTest extends MockClientTestCase
                 ->withStoreLabel(2, 'Rouge'),
         );
 
-        self::assertSame('id_5', $optionId);
+        self::assertSame('5', $optionId);
         $body = json_decode((string) $this->lastRequest()->getBody(), true);
         self::assertSame('Red', $body['option']['label']);
         self::assertSame(

@@ -41,6 +41,8 @@ final class SearchCriteria
     /**
      * Add an AND filter (its own group). Pass an array value with the "in"/"nin"
      * condition type to match a set; it is joined with commas as Magento expects.
+     * Magento has no escape for a comma inside a set value, so match values that
+     * contain one with "eq" filters instead (see {@see whereAny()}).
      */
     public function where(string $field, mixed $value, string $conditionType = 'eq'): self
     {
@@ -83,6 +85,14 @@ final class SearchCriteria
         ];
 
         return $this;
+    }
+
+    /**
+     * Whether any sort order has been set.
+     */
+    public function hasSort(): bool
+    {
+        return $this->sortOrders !== [];
     }
 
     public function pageSize(int $pageSize): self

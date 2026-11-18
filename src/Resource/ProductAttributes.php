@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Resource;
 
 use Baldie81\Magento2SDK\Enum\FrontendInput;
+use Baldie81\Magento2SDK\Exception\ApiException;
 use Baldie81\Magento2SDK\Support\AttributeOption;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 
@@ -83,8 +84,13 @@ final class ProductAttributes extends AbstractResource
     }
 
     /**
-     * Add one option to a selectable attribute. Returns the new option id
-     * (Magento returns it as a bare string, e.g. "id_5").
+     * Add one option to a selectable attribute. Returns the new option's real
+     * id (e.g. "5") — the same form {@see optionMap()} and {@see findOption()}
+     * yield, so it can be used directly as an attribute value.
+     *
+     * What Magento itself returns varies by version ("id_5", "5", or just
+     * `true`); that is normalised here, looking the option up by label when the
+     * response doesn't carry a usable id.
      *
      * Pass an {@see AttributeOption} for per-store-view (multi-language) labels,
      * or a raw array for full control.
@@ -93,16 +99,52 @@ final class ProductAttributes extends AbstractResource
      */
     public function addOption(string $attributeCode, AttributeOption|array $option): string
     {
-        $payload = $option instanceof AttributeOption ? $option->toArray() : $option;
+        $payload = $this->payload($option);
+        $label   = $this->optionLabel($option);
 
-        $id = (string) $this->http->post(
+        $id = $this->resolveOptionId($attributeCode, $this->postOption($attributeCode, $payload), $label, $payload);
+
+        $this->rememberOption($attributeCode, $label, $id);
+
+        return $id;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     */
+    private function postOption(string $attributeCode, array $payload): mixed
+    {
+        return $this->http->post(
             'V1/products/attributes/' . $this->segment($attributeCode) . '/options',
             ['option' => $payload],
         );
+    }
 
-        $this->rememberOption($attributeCode, $this->optionLabel($option), $id);
+    /**
+     * Turn the option endpoint's version-dependent return into a real option id.
+     *
+     * @param array<string,mixed> $payload
+     */
+    private function resolveOptionId(string $attributeCode, mixed $raw, string $label, array $payload): string
+    {
+        if ((is_string($raw) || is_int($raw)) && preg_match('/^(?:id_)?(\d+)$/', (string) $raw, $m) === 1) {
+            return $m[1];
+        }
 
-        return $id;
+        // Re-posting an existing option: its id is the one that was sent.
+        $sent = is_scalar($payload['value'] ?? null) ? (string) $payload['value'] : '';
+        if ($sent !== '' && ctype_digit($sent)) {
+            return $sent;
+        }
+
+        if ($label !== '') {
+            $found = $this->optionMap($attributeCode, true)[self::normalizeLabel($label)] ?? null;
+            if ($found !== null) {
+                return $found;
+            }
+        }
+
+        return is_scalar($raw) ? (string) $raw : '';
     }
 
     /**
@@ -121,8 +163,15 @@ final class ProductAttributes extends AbstractResource
     public function optionMap(string $attributeCode, bool $refresh = false): array
     {
         if ($refresh || !array_key_exists($attributeCode, $this->optionMaps)) {
+            // Always read through the unscoped path: under "rest/<store>/" the
+            // labels are that store view's translations, which would never
+            // match the labels callers look options up by.
+            $options = (array) ($this->http->unscoped()->get(
+                'V1/products/attributes/' . $this->segment($attributeCode) . '/options',
+            ) ?? []);
+
             $map = [];
-            foreach ($this->options($attributeCode) as $option) {
+            foreach ($options as $option) {
                 if (!isset($option['label'], $option['value']) || (string) $option['value'] === '') {
                     continue;
                 }
@@ -179,26 +228,38 @@ final class ProductAttributes extends AbstractResource
      * place. Returns the option id either way.
      *
      * Unlike {@see ensureOption()}, this refreshes the translations of an
-     * existing option. The update is performed by re-posting the option with its
-     * existing `value` (id) set, which Magento treats as an update rather than a
-     * new option.
+     * existing option. The update goes through Magento's dedicated option
+     * update route (`PUT .../options/{optionId}`, available from Magento 2.4.1);
+     * on older releases the route doesn't exist and answers 404, so it falls
+     * back to re-posting the option with its existing `value` (id) set.
      *
      * @param AttributeOption|array<string,mixed> $option
      */
     public function upsertOption(string $attributeCode, AttributeOption|array $option): string
     {
-        $existingId = $this->findOption($attributeCode, $this->optionLabel($option));
+        $label      = $this->optionLabel($option);
+        $existingId = $this->findOption($attributeCode, $label);
 
         if ($existingId === null) {
             return $this->addOption($attributeCode, $option);
         }
 
-        $payload = $option instanceof AttributeOption ? $option->toArray() : $option;
+        $payload          = $this->payload($option);
         $payload['value'] = $existingId;
-        $this->addOption($attributeCode, $payload);
-        // The update endpoint's return isn't necessarily the id; keep the cache
-        // pointing at the known existing id.
-        $this->rememberOption($attributeCode, $this->optionLabel($option), $existingId);
+
+        try {
+            $this->http->put(
+                'V1/products/attributes/' . $this->segment($attributeCode) . '/options/' . $this->segment($existingId),
+                ['option' => $payload],
+            );
+        } catch (ApiException $e) {
+            if ($e->statusCode !== 404) {
+                throw $e;
+            }
+            $this->postOption($attributeCode, $payload);
+        }
+
+        $this->rememberOption($attributeCode, $label, $existingId);
 
         return $existingId;
     }
@@ -286,7 +347,7 @@ final class ProductAttributes extends AbstractResource
      */
     public function searchAll(SearchCriteria $criteria, int $pageSize = self::MAX_PAGE_SIZE): array
     {
-        return $this->paginateItems('V1/products/attributes', $criteria, $pageSize);
+        return $this->paginateItems('V1/products/attributes', $criteria, $pageSize, 'attribute_code');
     }
 
     private static function normalizeLabel(string $label): string

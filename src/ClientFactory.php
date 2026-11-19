@@ -23,11 +23,37 @@ final class ClientFactory
             'connect_timeout' => $config->connectTimeout,
             'verify'          => $config->verifySsl,
             'http_errors'     => true,
-            'headers'         => array_merge([
-                'Accept'        => 'application/json',
-                'Content-Type'  => 'application/json',
-                'Authorization' => 'Bearer ' . $config->token,
-            ], $config->defaultHeaders),
+            // Never followed: a redirect would turn a POST/PUT into a GET, or
+            // replay a request body to another scheme/host.
+            'allow_redirects' => false,
+            'headers'         => self::headers($config),
         ]);
+    }
+
+    /**
+     * The SDK's headers with the caller's merged over them. Header names are
+     * case-insensitive, so "authorization" replaces "Authorization" rather
+     * than being sent alongside it.
+     *
+     * @return array<string,string>
+     */
+    private static function headers(Configuration $config): array
+    {
+        $headers = [
+            'Accept'        => 'application/json',
+            'Content-Type'  => 'application/json',
+            'Authorization' => 'Bearer ' . $config->token,
+        ];
+
+        foreach ($config->defaultHeaders as $name => $value) {
+            foreach (array_keys($headers) as $existing) {
+                if (strcasecmp($existing, (string) $name) === 0) {
+                    unset($headers[$existing]);
+                }
+            }
+            $headers[(string) $name] = $value;
+        }
+
+        return $headers;
     }
 }

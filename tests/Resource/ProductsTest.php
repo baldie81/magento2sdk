@@ -158,7 +158,7 @@ final class ProductsTest extends MockClientTestCase
         self::assertSame('sku', $query['searchCriteria']['sortOrders'][0]['field']);
     }
 
-    public function testSearchAllRetriesWithoutTheDefaultSortAndWarnsWhenItIsRejected(): void
+    public function testSearchAllRetriesWithoutTheDefaultSortWhenItIsRejected(): void
     {
         $ok     = json_encode(['items' => [['sku' => 'a']], 'total_count' => 1]);
         $client = $this->mockClient([
@@ -167,12 +167,11 @@ final class ProductsTest extends MockClientTestCase
             new Response(200, [], $ok), // second walk: no sort, no retry
         ]);
 
-        $warnings = [];
-        set_error_handler(static function (int $level, string $message) use (&$warnings): bool {
-            $warnings[] = $message;
-
-            return true;
-        }, E_USER_WARNING);
+        // Frameworks turn any PHP warning into an exception, so the fallback
+        // must stay silent for the search to actually succeed.
+        set_error_handler(static function (int $level, string $message): bool {
+            throw new \ErrorException($message, 0, $level);
+        });
 
         try {
             $first  = $client->products()->searchAll(SearchCriteria::create());
@@ -188,10 +187,80 @@ final class ProductsTest extends MockClientTestCase
         self::assertArrayNotHasKey('sortOrders', $retry['searchCriteria']);
         parse_str((string) $this->history[2]['request']->getUri()->getQuery(), $later);
         self::assertArrayNotHasKey('sortOrders', $later['searchCriteria']);
+    }
 
-        self::assertCount(1, $warnings); // warned once, not on every walk
-        self::assertStringContainsString('default sort "entity_id" was rejected by V1/products', $warnings[0]);
-        self::assertStringContainsString('Invalid attribute name: entity_id', $warnings[0]);
+    public function testSearchAllDoesNotBlameATransientServerErrorOnTheDefaultSort(): void
+    {
+        $client = $this->mockClient([
+            new Response(503, [], 'Service Unavailable'),
+            new Response(200, [], json_encode(['items' => [['sku' => 'a']], 'total_count' => 1])),
+        ]);
+
+        try {
+            $client->products()->searchAll(SearchCriteria::create());
+            self::fail('Expected ApiException was not thrown.');
+        } catch (ApiException $e) {
+            self::assertSame(503, $e->statusCode);
+            self::assertCount(1, $this->history); // not retried
+        }
+
+        // …and the default sort is still applied on the next walk.
+        $client->products()->searchAll(SearchCriteria::create());
+        parse_str((string) $this->lastRequest()->getUri()->getQuery(), $query);
+        self::assertSame('entity_id', $query['searchCriteria']['sortOrders'][0]['field']);
+    }
+
+    public function testSearchBySkusKeepsEveryRequestUrlUnderTheServerLimit(): void
+    {
+        $empty  = json_encode(['items' => [], 'total_count' => 0]);
+        $client = $this->mockClient(array_fill(0, 40, new Response(200, [], $empty)));
+
+        $skus = [];
+        for ($i = 0; $i < 300; $i++) {
+            $skus[] = str_pad((string) $i, 64, 'X', STR_PAD_LEFT);
+        }
+        for ($i = 0; $i < 40; $i++) {
+            $skus[] = 'WITH,COMMA-' . str_pad((string) $i, 40, 'Y', STR_PAD_LEFT);
+        }
+
+        $client->products()->searchBySkus($skus);
+
+        self::assertGreaterThan(2, count($this->history));
+        $seen = 0;
+        foreach ($this->history as $entry) {
+            self::assertLessThan(6000, strlen((string) $entry['request']->getUri()));
+            parse_str((string) $entry['request']->getUri()->getQuery(), $query);
+            foreach ($query['searchCriteria']['filterGroups'][0]['filters'] as $filter) {
+                $seen += $filter['conditionType'] === 'in' ? count(explode(',', $filter['value'])) : 1;
+            }
+        }
+        self::assertSame(340, $seen); // every SKU was asked for exactly once
+    }
+
+    public function testSearchBySkusKeysTheResultByTheSkusAsRequested(): void
+    {
+        $client = $this->mockClient([new Response(200, [], json_encode([
+            'items'       => [['id' => 7, 'sku' => 'Abc-1'], ['id' => 8, 'sku' => 'XYZ']],
+            'total_count' => 2,
+        ]))]);
+
+        $map = $client->products()->searchBySkus(['ABC-1', 'xyz', 'missing']);
+
+        self::assertSame(['ABC-1' => 7, 'xyz' => 8], $map);
+    }
+
+    public function testIdentifiersThatWouldEscapeTheirRouteAreRefused(): void
+    {
+        $client = $this->mockClient([]);
+
+        foreach (['', '.', '..'] as $sku) {
+            try {
+                $client->products()->delete($sku);
+                self::fail('Expected InvalidArgumentException was not thrown.');
+            } catch (\InvalidArgumentException) {
+                self::assertCount(0, $this->history);
+            }
+        }
     }
 
     public function testSearchAllStillThrowsWhenTheFailureIsNotTheDefaultSort(): void

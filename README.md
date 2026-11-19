@@ -48,8 +48,23 @@ $product = $magento->products()->get('SKU-123');
 ```
 
 Authentication is a bearer token — a Magento **Integration** access token, or an
-admin token you obtain yourself. TLS verification is **on** by default; pass
-`verifySsl: false` only for local/self-signed environments.
+admin token you obtain yourself.
+
+### Connection security
+
+- The base URL must be **`https://`**, because the token travels with every
+  request. For a local store on plain HTTP, opt in with
+  `allowInsecureHttp: true`.
+- TLS verification is **on** by default; pass `verifySsl: false` only for
+  local/self-signed environments.
+- **Redirects are never followed.** A 3xx answer raises an `ApiException`
+  naming the target, so set `baseUrl` to the store's final address (scheme,
+  `www`, any sub-path). Following a redirect would turn a `POST`/`PUT` into a
+  `GET`, or replay a request body to another host.
+- A malformed setting (URL, token, store code, negative timeout) throws an
+  `InvalidArgumentException` when the `Configuration` is built.
+- The token is redacted from `var_dump()`/`print_r()` of the `Configuration`,
+  and is never attached to the SDK's exceptions.
 
 ## Value objects (or arrays)
 
@@ -116,8 +131,14 @@ $magento->products()->enable('SKU-123');
 $magento->products()->delete('SKU-123');
 
 // Resolve many SKUs to entity ids (auto-chunked + paginated to dodge 414s).
+// Keyed by the SKUs as you passed them; SKUs that don't exist are absent.
 $idsBySku = $magento->products()->searchBySkus(['A-1', 'B-2', 'C-3']);
 ```
+
+An identifier that goes into the URL path (SKU, attribute code, bulk uuid) may
+contain spaces, slashes and so on — it is encoded for you — but an empty one,
+`.` or `..` throws an `InvalidArgumentException` rather than silently
+addressing a different endpoint.
 
 ## Search criteria
 
@@ -155,10 +176,9 @@ page-size cap still yields everything — and an empty or repeated page always
 ends the walk (Magento answers an out-of-range page with the last page again).
 If your criteria has no sort, a stable one (the entity id / attribute code) is
 added so pages don't shift while data changes. If a store rejects that default
-sort, the walk is retried without it and an `E_USER_WARNING` names the endpoint
-and Magento's error, so the search still succeeds; set your own `->sort()` to
-choose the order (a sort you set yourself is never retried — its error is
-thrown as usual):
+sort (HTTP 400), the walk is retried without it, so the search still succeeds;
+set your own `->sort()` to choose the order (a sort you set yourself is never
+retried — its error is thrown as usual):
 
 ```php
 $products   = $magento->products()->searchAll($criteria);   // list of items
@@ -166,9 +186,12 @@ $attributes = $magento->attributes()->searchAll($criteria);
 $categories = $magento->categories()->listFlat();            // every category
 ```
 
-`searchBySkus()` paginates the same way (and additionally chunks the SKU set so
-the `sku in (...)` filter never overflows the URL). SKUs containing a comma
-can't go in an `in` set, so they are looked up with `eq` filters instead.
+`searchBySkus()` paginates the same way (and additionally chunks the SKU set —
+by count and by encoded length — so the filter never overflows the URL). SKUs
+containing a comma can't go in an `in` set, so they are looked up with `eq`
+filters instead. Magento matches SKUs case-insensitively; the result is keyed
+by your spelling of each SKU. (PHP turns an all-digit key such as `"123"` into
+the integer `123`.)
 
 `attributeSets()->all()` and `->groups()` walk every page too.
 
@@ -427,14 +450,28 @@ Bulk work is processed asynchronously by Magento's message-queue consumers, so a
 
 ## Errors
 
-Every failure is a `Baldie81\Magento2SDK\Exception\MagentoException`:
+Every failed request is a `Baldie81\Magento2SDK\Exception\MagentoException`:
 
 - `ApiException` — Magento returned 4xx/5xx. Exposes `->statusCode`,
-  `->rawBody`, `->parameters`, and a message with Magento's `%1`/`%name`
-  placeholders already interpolated (nested validation `errors` are appended).
-  Also thrown when a 2xx response isn't valid JSON — e.g. an HTML maintenance
-  or firewall page — rather than returning an empty result.
+  `->rawBody`, `->parameters`, the failed request as `->method` / `->uri`, and
+  a message with Magento's `%1`/`%name` placeholders already interpolated
+  (nested validation `errors` are appended). Also thrown for a redirect (3xx),
+  and when a 2xx response isn't valid JSON — e.g. an HTML maintenance or
+  firewall page — rather than returning an empty result.
 - `TransportException` — connection/timeout/TLS failure, no HTTP response.
+- `UnexpectedResponseException` — Magento answered successfully but not with
+  what the endpoint promises (e.g. no id back from `invoice()`, `ship()`,
+  `media()->create()` or `addOption()`). The value is on `->response`. The
+  write may have gone through, so check the store before retrying.
+
+The Guzzle exception is deliberately **not** chained as `getPrevious()`: it
+holds the request, including the `Authorization` header and the body, which
+would end up in logs and error reporters. Request bodies and passwords are
+also kept out of stack traces (PHP 8.2+).
+
+Invalid *input* — a malformed `Configuration`, an invalid store code, an empty
+or `.`/`..` identifier — throws PHP's `InvalidArgumentException` before any
+request is sent.
 
 ```php
 use Baldie81\Magento2SDK\Exception\ApiException;
@@ -450,7 +487,8 @@ try {
 ## Bring your own transport
 
 Need custom middleware, retries, or logging? Build the Guzzle client yourself
-and hand it over — its `base_uri` must point at the store root:
+and hand it over — its `base_uri` must point at the store root and end in a
+slash, and it must send the `Authorization` header itself:
 
 ```php
 use GuzzleHttp\Client;
@@ -460,8 +498,8 @@ $guzzle  = new Client([/* base_uri, handler stack, ... */]);
 $magento = MagentoClient::fromGuzzle($guzzle, restPrefix: 'rest/');
 ```
 
-Error statuses always raise an `ApiException`, even if your client sets
-`http_errors` to `false`.
+Error statuses always raise an `ApiException` and redirects are never followed,
+whatever your client's `http_errors` / `allow_redirects` settings are.
 
 ## Store scoping
 
@@ -473,7 +511,9 @@ new Configuration(baseUrl: '...', token: '...', storeCode: 'fr');
 ```
 
 …or derive a store-scoped client on the fly with `forStore()` — it shares the
-same transport and leaves the original (default-scope) client untouched:
+same transport and leaves the original (default-scope) client untouched. A
+store code must start with a letter and contain only letters, digits and
+underscores (Magento's own rule); anything else throws:
 
 ```php
 // create globally, then override only the store-scoped fields per store view
@@ -496,6 +536,11 @@ composer analyse   # PHPStan (level 8 on src/, see phpstan.neon.dist)
 ```
 
 CI runs both on every supported PHP version.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability. Changes are
+listed in the [changelog](CHANGELOG.md).
 
 ## License
 

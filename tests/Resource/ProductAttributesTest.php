@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use Baldie81\Magento2SDK\Enum\FrontendInput;
+use Baldie81\Magento2SDK\Exception\UnexpectedResponseException;
 use Baldie81\Magento2SDK\Support\AttributeOption;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
 use GuzzleHttp\Psr7\Response;
@@ -140,6 +141,22 @@ final class ProductAttributesTest extends MockClientTestCase
         ]);
 
         self::assertSame('12', $client->attributes()->addOption('color', ['label' => 'Red']));
+    }
+
+    public function testAddOptionThrowsRatherThanGuessAnIdItCannotDetermine(): void
+    {
+        $client = $this->mockClient([
+            new Response(200, [], 'true'),
+            new Response(200, [], json_encode([['label' => ' ', 'value' => '']])), // label not found
+        ]);
+
+        try {
+            $client->attributes()->addOption('color', ['label' => 'Red']);
+            self::fail('Expected UnexpectedResponseException was not thrown.');
+        } catch (UnexpectedResponseException $e) {
+            self::assertTrue($e->response);
+            self::assertStringContainsString('"Red"', $e->getMessage());
+        }
     }
 
     public function testAddOptionAcceptsAnAlreadyNumericId(): void

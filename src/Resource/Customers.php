@@ -56,7 +56,7 @@ final class Customers extends AbstractResource
      * @param Customer|array<string,mixed> $customer
      * @return array<string,mixed>
      */
-    public function create(Customer|array $customer, ?string $password = null): array
+    public function create(Customer|array $customer, #[\SensitiveParameter] ?string $password = null): array
     {
         $body = ['customer' => $this->payload($customer)];
         if ($password !== null) {

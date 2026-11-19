@@ -34,6 +34,20 @@ final class MagentoClientTest extends MockClientTestCase
         self::assertStringContainsString('/rest/V1/products/X', (string) $this->history[1]['request']->getUri());
     }
 
+    public function testForStoreRefusesCodesThatWouldAlterTheUrl(): void
+    {
+        $client = $this->mockClient([]);
+
+        foreach (['../../admin', 'fr?x=1#', 'a/b', '1st'] as $code) {
+            try {
+                $client->forStore($code);
+                self::fail("Expected InvalidArgumentException for \"{$code}\".");
+            } catch (\InvalidArgumentException) {
+                self::assertCount(0, $this->history);
+            }
+        }
+    }
+
     public function testForStoreWithEmptyCodeFallsBackToDefaultScope(): void
     {
         $client = $this->mockClient([new Response(200, [], json_encode(['sku' => 'X']))]);

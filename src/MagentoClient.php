@@ -57,7 +57,10 @@ final class MagentoClient
     /**
      * Build a client around a pre-configured Guzzle client, for callers who need
      * custom middleware/handlers. The Guzzle client's base_uri must point at the
-     * store root; `$restPrefix` is prepended to every REST path.
+     * store root and end in a slash; `$restPrefix` is prepended to every REST
+     * path. The client supplies its own Authorization header. Whatever it is
+     * configured with, error statuses always throw and redirects are never
+     * followed.
      */
     public static function fromGuzzle(ClientInterface $client, string $restPrefix = 'rest/'): self
     {
@@ -75,10 +78,12 @@ final class MagentoClient
      * code returns the default (unscoped) view.
      *
      *   $magento->forStore('fr')->products()->update('SKU-1', Product::make('SKU-1')->name('Robe'));
+     *
+     * @throws \InvalidArgumentException when the code isn't a valid store code
      */
     public function forStore(string $storeCode): self
     {
-        $code   = trim($storeCode, "/ \t\n\r\0\x0B");
+        $code   = Configuration::normalizeStoreCode($storeCode);
         $prefix = $code === '' ? 'rest/' : "rest/$code/";
 
         return new self($this->http->withRestPrefix($prefix));

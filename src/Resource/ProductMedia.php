@@ -41,10 +41,10 @@ final class ProductMedia extends AbstractResource
      */
     public function create(string $sku, MediaEntry|array $entry): int
     {
-        return (int) $this->http->post(
+        return $this->id($this->http->post(
             'V1/products/' . $this->segment($sku) . '/media',
             ['entry' => $this->payload($entry)],
-        );
+        ), 'the new media entry id');
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Baldie81\Magento2SDK\Resource;
 
+use Baldie81\Magento2SDK\Exception\UnexpectedResponseException;
 use Baldie81\Magento2SDK\Support\Arrayable;
 use Baldie81\Magento2SDK\Support\OrderStatus;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
@@ -31,10 +32,21 @@ final class Orders extends AbstractResource
      * Magento returns the admin-configurable status code, which {@see OrderStatus}
      * pairs with a label and, where it coincides with a system state, an
      * {@see \Baldie81\Magento2SDK\Enum\OrderState} (via {@see OrderStatus::state()}).
+     *
+     * @throws UnexpectedResponseException when the response isn't a status code
      */
     public function getStatus(int $orderId): OrderStatus
     {
-        return OrderStatus::of((string) $this->http->get("V1/orders/{$orderId}/statuses"));
+        $status = $this->http->get("V1/orders/{$orderId}/statuses");
+
+        if (!is_string($status) || trim($status) === '') {
+            throw new UnexpectedResponseException(
+                sprintf('Magento did not return a status code for order %d (got %s).', $orderId, get_debug_type($status)),
+                $status,
+            );
+        }
+
+        return OrderStatus::of($status);
     }
 
     /**
@@ -97,7 +109,7 @@ final class Orders extends AbstractResource
             $body['comment']       = ['comment' => $comment];
         }
 
-        return (int) $this->http->post("V1/order/{$orderId}/invoice", $body);
+        return $this->id($this->http->post("V1/order/{$orderId}/invoice", $body), 'the new invoice id');
     }
 
     /**
@@ -128,7 +140,7 @@ final class Orders extends AbstractResource
             $body['comment']       = ['comment' => $comment];
         }
 
-        return (int) $this->http->post("V1/order/{$orderId}/ship", $body);
+        return $this->id($this->http->post("V1/order/{$orderId}/ship", $body), 'the new shipment id');
     }
 
     /**
@@ -165,7 +177,7 @@ final class Orders extends AbstractResource
             $body['arguments'] = $arguments;
         }
 
-        return (int) $this->http->post("V1/order/{$orderId}/refund", $body);
+        return $this->id($this->http->post("V1/order/{$orderId}/refund", $body), 'the new credit memo id');
     }
 
     /**
@@ -201,7 +213,7 @@ final class Orders extends AbstractResource
             $body['arguments'] = $arguments;
         }
 
-        return (int) $this->http->post("V1/invoice/{$invoiceId}/refund", $body);
+        return $this->id($this->http->post("V1/invoice/{$invoiceId}/refund", $body), 'the new credit memo id');
     }
 
     /**

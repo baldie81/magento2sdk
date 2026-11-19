@@ -57,12 +57,12 @@ final class AttributeSets extends AbstractResource
         string $attributeCode,
         int $sortOrder = 0,
     ): int {
-        return (int) $this->http->post('V1/products/attribute-sets/attributes', [
+        return $this->id($this->http->post('V1/products/attribute-sets/attributes', [
             'attributeSetId'   => $attributeSetId,
             'attributeGroupId' => $attributeGroupId,
             'attributeCode'    => $attributeCode,
             'sortOrder'        => $sortOrder,
-        ]);
+        ]), 'the assigned attribute id');
     }
 
     /**

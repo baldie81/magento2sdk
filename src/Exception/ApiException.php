@@ -20,6 +20,10 @@ use Throwable;
  * reads naturally. The body is also normalised to UTF-8 first, since a store
  * whose default language isn't English can return non-UTF-8 bytes that would
  * otherwise make json_decode() fail.
+ *
+ * {@see $method} and {@see $uri} say which request failed. The underlying
+ * Guzzle exception is not chained as `previous` — it carries the request's
+ * Authorization header and body, which must not reach logs.
  */
 final class ApiException extends MagentoException
 {
@@ -32,12 +36,18 @@ final class ApiException extends MagentoException
         public readonly ?string $rawBody = null,
         public readonly array $parameters = [],
         ?Throwable $previous = null,
+        public readonly ?string $method = null,
+        public readonly ?string $uri = null,
     ) {
         parent::__construct($message, $statusCode, $previous);
     }
 
-    public static function fromResponse(ResponseInterface $response, ?Throwable $previous = null): self
-    {
+    public static function fromResponse(
+        ResponseInterface $response,
+        ?Throwable $previous = null,
+        ?string $method = null,
+        ?string $uri = null,
+    ): self {
         $status  = $response->getStatusCode();
         $body    = self::toUtf8((string) $response->getBody());
         $decoded = json_decode($body, true);
@@ -70,24 +80,28 @@ final class ApiException extends MagentoException
             $message = "Magento returned HTTP {$status}.";
         }
 
-        return new self($message, $status, $body, $parameters, $previous);
+        return new self($message, $status, $body, $parameters, $previous, $method, $uri);
     }
 
-    public static function fromRequestException(RequestException $e): self
+    public static function fromRequestException(#[\SensitiveParameter] RequestException $e): self
     {
+        $request = $e->getRequest();
+        $method  = $request->getMethod();
+        $uri     = (string) $request->getUri()->withUserInfo('');
+
         $response = $e->getResponse();
         if ($response !== null) {
-            return self::fromResponse($response, $e);
+            return self::fromResponse($response, null, $method, $uri);
         }
 
-        return new self($e->getMessage(), 0, null, [], $e);
+        return new self($e->getMessage(), 0, null, [], null, $method, $uri);
     }
 
     /**
      * Best-effort human-readable description of any throwable, used where an
      * exception can't be rethrown (e.g. settled async rejection reasons).
      */
-    public static function describe(?Throwable $e): string
+    public static function describe(#[\SensitiveParameter] ?Throwable $e): string
     {
         if ($e instanceof RequestException) {
             return self::fromRequestException($e)->getMessage();

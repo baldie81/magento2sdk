@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Baldie81\Magento2SDK\Resource;
 
 use Baldie81\Magento2SDK\Exception\ApiException;
+use Baldie81\Magento2SDK\Exception\UnexpectedResponseException;
 use Baldie81\Magento2SDK\Http\HttpClient;
 use Baldie81\Magento2SDK\Support\Arrayable;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
+use InvalidArgumentException;
 
 abstract class AbstractResource
 {
@@ -33,10 +35,45 @@ abstract class AbstractResource
     /**
      * URL-encode a single path segment (SKUs and attribute codes may contain
      * spaces, slashes, etc.).
+     *
+     * An empty value, "." and ".." are refused: they survive encoding and
+     * would be resolved away as path navigation, silently addressing a
+     * different endpoint (e.g. the product list instead of one product).
+     *
+     * @throws InvalidArgumentException
      */
     protected function segment(string $value): string
     {
+        if ($value === '' || $value === '.' || $value === '..') {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid identifier "%s": it must not be empty, "." or "..".',
+                $value,
+            ));
+        }
+
         return rawurlencode($value);
+    }
+
+    /**
+     * Read the id an endpoint returns as a bare JSON integer (or all-digit
+     * string). Anything else is refused rather than cast, since `(int)` turns
+     * any JSON object into 1 and an empty body into 0.
+     *
+     * @throws UnexpectedResponseException
+     */
+    protected function id(mixed $response, string $what): int
+    {
+        if (is_int($response) && $response >= 0) {
+            return $response;
+        }
+        if (is_string($response) && $response !== '' && ctype_digit($response)) {
+            return (int) $response;
+        }
+
+        throw new UnexpectedResponseException(
+            sprintf('Magento did not return %s (got %s).', $what, get_debug_type($response)),
+            $response,
+        );
     }
 
     /**
@@ -99,9 +136,9 @@ abstract class AbstractResource
      *
      * `$defaultSort` is applied only when the criteria has no sort of its own,
      * to keep page boundaries stable while the data changes. Should the store
-     * reject that sort, the walk is retried without it and an E_USER_WARNING
-     * says so — the SDK's own default never makes a search fail. The passed
-     * criteria is not mutated.
+     * reject that sort (HTTP 400), the walk is retried without it — the SDK's
+     * own default never makes a search fail — and later walks on this
+     * resource skip it. The passed criteria is not mutated.
      *
      * @return list<array<string,mixed>>
      */
@@ -132,7 +169,9 @@ abstract class AbstractResource
             try {
                 $response = (array) $this->http->get($path, $criteria->toArray());
             } catch (ApiException $e) {
-                if ($unsorted === null || $page !== 1) {
+                // Only a 400 can mean "bad sort field"; an auth failure or a
+                // transient 5xx must surface as it is.
+                if ($unsorted === null || $page !== 1 || $e->statusCode !== 400) {
                     throw $e;
                 }
 
@@ -143,15 +182,6 @@ abstract class AbstractResource
                 $response = (array) $this->http->get($path, $criteria->toArray());
 
                 $this->rejectedDefaultSorts[$path] = true;
-                trigger_error(sprintf(
-                    'magento2-sdk: the default sort "%s" was rejected by %s (HTTP %d: %s). Results were fetched'
-                    . ' without it, so pages may shift if data changes during the walk; pass an explicit'
-                    . ' sort() on the SearchCriteria to choose the order yourself.',
-                    $defaultSort,
-                    $path,
-                    $e->statusCode,
-                    $e->getMessage(),
-                ), E_USER_WARNING);
             }
 
             $batch = $response['items'] ?? [];

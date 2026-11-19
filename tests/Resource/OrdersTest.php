@@ -6,6 +6,7 @@ namespace Baldie81\Magento2SDK\Tests\Resource;
 
 use GuzzleHttp\Psr7\Response;
 use Baldie81\Magento2SDK\Enum\OrderState;
+use Baldie81\Magento2SDK\Exception\UnexpectedResponseException;
 use Baldie81\Magento2SDK\Support\OrderStatus;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 use Baldie81\Magento2SDK\Tests\MockClientTestCase;
@@ -156,6 +157,32 @@ final class OrdersTest extends MockClientTestCase
         $body = json_decode((string) $this->lastRequest()->getBody(), true);
         self::assertFalse($body['isOnline']);
         self::assertSame([['order_item_id' => 11, 'qty' => 1]], $body['items']);
+    }
+
+    public function testIdReturningCallsRefuseAResponseThatIsNotAnId(): void
+    {
+        // (int) would turn these into the ids 1 and 0.
+        foreach (['{"unexpected":"shape"}', '', 'true', '"id_5"'] as $body) {
+            $client = $this->mockClient([new Response(200, [], $body)]);
+
+            try {
+                $client->orders()->invoice(7);
+                self::fail("Expected UnexpectedResponseException for body: {$body}");
+            } catch (UnexpectedResponseException $e) {
+                self::assertStringContainsString('invoice id', $e->getMessage());
+            }
+        }
+
+        $client = $this->mockClient([new Response(200, [], '"42"')]);
+        self::assertSame(42, $client->orders()->ship(7));
+    }
+
+    public function testGetStatusRefusesAResponseThatIsNotAStatusCode(): void
+    {
+        $client = $this->mockClient([new Response(200, [], '{"message":"x"}')]);
+
+        $this->expectException(UnexpectedResponseException::class);
+        $client->orders()->getStatus(7);
     }
 
     public function testCancelPostsToPluralPathAndReturnsBool(): void

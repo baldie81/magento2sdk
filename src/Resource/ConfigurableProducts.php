@@ -63,10 +63,10 @@ final class ConfigurableProducts extends AbstractResource
      */
     public function addOption(string $sku, array $option): int
     {
-        return (int) $this->http->post(
+        return $this->id($this->http->post(
             'V1/configurable-products/' . $this->segment($sku) . '/options',
             ['option' => $option],
-        );
+        ), 'the new option id');
     }
 
     public function deleteOption(string $sku, int $optionId): bool

@@ -31,10 +31,10 @@ final class Stock extends AbstractResource
      */
     public function update(string $sku, StockItem|array $stockItem, int $itemId = 0): int
     {
-        return (int) $this->http->put(
+        return $this->id($this->http->put(
             'V1/products/' . $this->segment($sku) . '/stockItems/' . $itemId,
             ['stockItem' => $this->payload($stockItem)],
-        );
+        ), 'the stock item id');
     }
 
     /**

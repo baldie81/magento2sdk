@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 
+      - name: Audit runtime dependencies
+        run: composer audit --no-dev
+
       - name: Static analysis
         run: composer analyse
 

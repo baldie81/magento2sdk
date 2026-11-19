@@ -6,6 +6,7 @@ namespace Baldie81\Magento2SDK\Resource;
 
 use Baldie81\Magento2SDK\Enum\FrontendInput;
 use Baldie81\Magento2SDK\Exception\ApiException;
+use Baldie81\Magento2SDK\Exception\UnexpectedResponseException;
 use Baldie81\Magento2SDK\Support\AttributeOption;
 use Baldie81\Magento2SDK\Support\SearchCriteria;
 
@@ -96,6 +97,10 @@ final class ProductAttributes extends AbstractResource
      * or a raw array for full control.
      *
      * @param AttributeOption|array<string,mixed> $option
+     *
+     * @throws UnexpectedResponseException when the option was posted but its id
+     *                                     can't be determined from the response
+     *                                     or by looking the label up
      */
     public function addOption(string $attributeCode, AttributeOption|array $option): string
     {
@@ -144,7 +149,15 @@ final class ProductAttributes extends AbstractResource
             }
         }
 
-        return is_scalar($raw) ? (string) $raw : '';
+        // Never guess: `true` would otherwise become the option id "1".
+        throw new UnexpectedResponseException(
+            sprintf(
+                'Magento accepted the option "%s" on attribute "%s" but its id could not be determined.',
+                $label,
+                $attributeCode,
+            ),
+            $raw,
+        );
     }
 
     /**
